@@ -1,2 +1,5 @@
 TwitchChatTTS/bin/
 TwitchChatTTS/obj/
+.redeems
+.token
+.twitchchannels
