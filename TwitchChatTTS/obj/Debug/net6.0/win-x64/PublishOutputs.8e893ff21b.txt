@@ -1,0 +1,2 @@
+/root/Projects/TwitchChatTTS/bin/Debug/net6.0/win-x64/publish/TwitchChatTTS.pdb
+/root/Projects/TwitchChatTTS/bin/Debug/net6.0/win-x64/publish/TwitchChatTTS.exe
