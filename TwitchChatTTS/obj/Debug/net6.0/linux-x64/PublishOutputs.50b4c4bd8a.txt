@@ -1,2 +1,0 @@
-/root/Projects/TwitchChatTTS/bin/Debug/net6.0/linux-x64/publish/TwitchChatTTS.pdb
-/root/Projects/TwitchChatTTS/bin/Debug/net6.0/linux-x64/publish/TwitchChatTTS
