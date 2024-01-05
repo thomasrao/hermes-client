@@ -11,18 +11,20 @@ public class TwitchApiClient {
     private TwitchBotToken token;
     private TwitchClient client;
     private TwitchPubSub publisher;
+    private WebHelper web;
     private bool initialized;
 
 
     public TwitchApiClient(TwitchBotToken token) {
         client = new TwitchClient(new WebSocketClient());
         publisher = new TwitchPubSub();
+        web = new WebHelper();
         initialized = false;
         this.token = token;
     }
 
     public async Task<bool> Authorize() {
-        var authorize = await WebHelper.Get("https://hermes.goblincaves.com/api/account/reauthorize");
+        var authorize = await web.Get("https://hermes.goblincaves.com/api/account/reauthorize");
         var status = (int) authorize.StatusCode;
         return status == 200 || status == 201;
     }

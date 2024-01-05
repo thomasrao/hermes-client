@@ -4,16 +4,20 @@ using NAudio.Wave.SampleProviders;
 
 public class AudioPlaybackEngine : IDisposable
 {
-    public static readonly AudioPlaybackEngine Instance = new AudioPlaybackEngine(22050, 1);
+    public static readonly AudioPlaybackEngine Instance = new AudioPlaybackEngine(44100, 2);
 
     private readonly IWavePlayer outputDevice;
     private readonly MixingSampleProvider mixer;
+    public int SampleRate { get; }
 
     private AudioPlaybackEngine(int sampleRate = 44100, int channelCount = 2)
     {
+        SampleRate = sampleRate;
         outputDevice = new WaveOutEvent();
+        
         mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channelCount));
         mixer.ReadFully = true;
+
         outputDevice.Init(mixer);
         outputDevice.Play();
     }
@@ -34,7 +38,7 @@ public class AudioPlaybackEngine : IDisposable
     public void PlaySound(string fileName)
     {
         var input = new AudioFileReader(fileName);
-        AddMixerInput(new AutoDisposeFileReader(input));
+        AddMixerInput(new WdlResamplingSampleProvider(ConvertToRightChannelCount(new AutoDisposeFileReader(input)), SampleRate));
     }
 
     public void PlaySound(NetworkWavSound sound)
@@ -63,7 +67,7 @@ public class AudioPlaybackEngine : IDisposable
         } else {
             throw new ArgumentException("Unsupported source encoding while adding to mixer.");
         }
-        return converted;
+        return ConvertToRightChannelCount(converted);
     }
 
     public void AddMixerInput(ISampleProvider input)
