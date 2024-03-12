@@ -1,5 +1,4 @@
-TwitchChatTTS/bin/
-TwitchChatTTS/obj/
-.redeems
-.token
-.twitchchannels
+appsettings.json
+tts.config.yml
+obj/
+bin/
