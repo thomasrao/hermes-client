@@ -4,22 +4,22 @@ using TwitchChatTTS.OBS.Socket;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Microsoft.Extensions.Logging;
-using TwitchChatTTS.Twitch;
 using Microsoft.Extensions.DependencyInjection;
 using TwitchChatTTS;
 using TwitchChatTTS.Seven;
+using TwitchChatTTS.Chat.Commands;
 
 
 public class ChatMessageHandler {
-    private ILogger<ChatMessageHandler> Logger { get; }
-    private Configuration Configuration { get; }
-    public EmoteCounter EmoteCounter { get; }
-    private EmoteDatabase Emotes { get; }
-    private TTSPlayer Player { get; }
-    private OBSSocketClient? Client { get; }
-    private TTSContext Context { get; }
+    private ILogger<ChatMessageHandler> _logger { get; }
+    private Configuration _configuration { get; }
+    public EmoteCounter _emoteCounter { get; }
+    private EmoteDatabase _emotes { get; }
+    private TTSPlayer _player { get; }
+    private ChatCommandManager _commands { get; }
+    private OBSSocketClient? _obsClient { get; }
+    private IServiceProvider _serviceProvider { get; }
 
-    private Regex? voicesRegex;
     private Regex sfxRegex;
 
 
@@ -29,46 +29,53 @@ public class ChatMessageHandler {
         EmoteCounter emoteCounter,
         EmoteDatabase emotes,
         TTSPlayer player,
+        ChatCommandManager commands,
         [FromKeyedServices("obs")] SocketClient<WebSocketMessage> client,
-        TTSContext context
+        IServiceProvider serviceProvider
     ) {
-        Logger = logger;
-        Configuration = configuration;
-        EmoteCounter = emoteCounter;
-        Emotes = emotes;
-        Player = player;
-        Client = client as OBSSocketClient;
-        Context = context;
+        _logger = logger;
+        _configuration = configuration;
+        _emoteCounter = emoteCounter;
+        _emotes = emotes;
+        _player = player;
+        _commands = commands;
+        _obsClient = client as OBSSocketClient;
+        _serviceProvider = serviceProvider;
 
-        voicesRegex = GenerateEnabledVoicesRegex();
         sfxRegex = new Regex(@"\(([A-Za-z0-9_-]+)\)");
     }
 
 
-    public MessageResult Handle(OnMessageReceivedArgs e) {
-        if (Configuration.Twitch?.TtsWhenOffline != true && Client?.Live != true)
+    public async Task<MessageResult> Handle(OnMessageReceivedArgs e) {
+        if (_configuration.Twitch?.TtsWhenOffline != true && _obsClient?.Live == false)
             return MessageResult.Blocked;
-
+        
+        var user = _serviceProvider.GetRequiredService<User>();
         var m = e.ChatMessage;
         var msg = e.ChatMessage.Message;
-        
-        // Skip TTS messages
-        if (m.IsVip || m.IsModerator || m.IsBroadcaster) {
-            if (msg.ToLower().StartsWith("!skip ") || msg.ToLower() == "!skip")
-                return MessageResult.Skip;
-            
-            if (msg.ToLower().StartsWith("!skipall ") || msg.ToLower() == "!skipall")
-                return MessageResult.SkipAll;
+        var chatterId = long.Parse(m.UserId);
+
+        var blocked = user.ChatterFilters.TryGetValue(m.Username, out TTSUsernameFilter? filter) && filter.Tag == "blacklisted";
+
+        if (!blocked || m.IsBroadcaster) {
+            try {
+                var commandResult = await _commands.Execute(msg, m);
+                if (commandResult != ChatCommandResult.Unknown) {
+                    return MessageResult.Command;
+                }
+            } catch (Exception ex) {
+                _logger.LogError(ex, "Failed at executing command.");
+            }
         }
 
-        if (Context.UsernameFilters.TryGetValue(m.Username, out TTSUsernameFilter? filter) && filter.Tag == "blacklisted") {
-            Logger.LogTrace($"Blocked message by {m.Username}: {msg}");
+        if (blocked) {
+            _logger.LogTrace($"Blocked message by {m.Username}: {msg}");
             return MessageResult.Blocked;
         }
 
         // Replace filtered words.
-        if (Context.WordFilters is not null) {
-            foreach (var wf in Context.WordFilters) {
+        if (user.RegexFilters != null) {
+            foreach (var wf in user.RegexFilters) {
                 if (wf.Search == null || wf.Replace == null)
                     continue;
                 
@@ -87,6 +94,7 @@ public class ChatMessageHandler {
         }
 
         // Filter highly repetitive words (like emotes) from the message.
+        int totalEmoteUsed = 0;
         var emotesUsed = new HashSet<string>();
         var words = msg.Split(" ");
         var wordCounter = new Dictionary<string, int>();
@@ -98,24 +106,31 @@ public class ChatMessageHandler {
                 wordCounter.Add(w, 1);
             }
 
-            var emoteId = Emotes?.Get(w);
-            if (emoteId != null)
-                emotesUsed.Add("7tv-" + emoteId);
+            var emoteId = _emotes?.Get(w);
+            if (emoteId == null)
+                emoteId = m.EmoteSet.Emotes.FirstOrDefault(e => e.Name == w)?.Id;
+            if (emoteId != null) {
+                emotesUsed.Add(emoteId);
+                totalEmoteUsed++;
+            }
 
-            if (wordCounter[w] <= 4 && (emoteId == null || emotesUsed.Count <= 4))
+            if (wordCounter[w] <= 4 && (emoteId == null || totalEmoteUsed <= 5))
                 filteredMsg += w + " ";
         }
         msg = filteredMsg;
 
         // Adding twitch emotes to the counter.
-        foreach (var emote in e.ChatMessage.EmoteSet.Emotes)
-            emotesUsed.Add("twitch-" + emote.Id);
+        foreach (var emote in e.ChatMessage.EmoteSet.Emotes) {
+            _logger.LogTrace("Twitch emote name used: " + emote.Name);
+            emotesUsed.Add(emote.Id);
+        }
         
         if (long.TryParse(e.ChatMessage.UserId, out long userId))
-            EmoteCounter.Add(userId, emotesUsed);
+            _emoteCounter.Add(userId, emotesUsed);
         if (emotesUsed.Any())
-            Logger.LogDebug("Emote counters for user #" + userId + ": " + string.Join(" | ", emotesUsed.Select(e => e + "=" + EmoteCounter.Get(userId, e))));
+            _logger.LogDebug("Emote counters for user #" + userId + ": " + string.Join(" | ", emotesUsed.Select(e => e + "=" + _emoteCounter.Get(userId, e))));
 
+        // Determine the priority of this message
         int priority = 0;
         if (m.IsStaff) {
             priority = int.MinValue;
@@ -130,19 +145,30 @@ public class ChatMessageHandler {
         } else if (m.IsHighlighted) {
             priority = -1;
         }
-        priority = (int) Math.Round(Math.Min(priority, -m.SubscribedMonthCount * (m.Badges.Any(b => b.Key == "subscriber") ? 1.2 : 1)));
+        priority = Math.Min(priority, -m.SubscribedMonthCount * (m.IsSubscriber ? 2 : 1));
 
-        var matches = voicesRegex?.Matches(msg).ToArray() ?? new Match[0];
-        int defaultEnd = matches.FirstOrDefault()?.Index ?? msg.Length;
-        if (defaultEnd > 0) {
-            HandlePartialMessage(priority, Context.DefaultVoice, msg.Substring(0, defaultEnd).Trim(), e);
+        // Determine voice selected.
+        string voiceSelected = user.DefaultTTSVoice;
+        if (user.VoicesSelected?.ContainsKey(userId) == true) {
+            var voiceId = user.VoicesSelected[userId];
+            if (user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) && voiceName != null) {
+                voiceSelected = voiceName;
+            }
         }
 
+        // Determine additional voices used
+        var voicesRegex = user.GenerateEnabledVoicesRegex();
+        var matches = voicesRegex?.Matches(msg).ToArray();
+        if (matches == null || matches.FirstOrDefault() == null || matches.FirstOrDefault().Index == 0) {
+            HandlePartialMessage(priority, voiceSelected, msg.Trim(), e);
+            return MessageResult.None;
+        }
+
+        HandlePartialMessage(priority, voiceSelected, msg.Substring(0, matches.FirstOrDefault().Index).Trim(), e);
         foreach (Match match in matches) {
             var message = match.Groups[2].ToString();
-            if (string.IsNullOrWhiteSpace(message)) {
+            if (string.IsNullOrWhiteSpace(message))
                 continue;
-            }
 
             var voice = match.Groups[1].ToString();
             voice = voice[0].ToString().ToUpper() + voice.Substring(1).ToLower();
@@ -162,8 +188,8 @@ public class ChatMessageHandler {
         var badgesString = string.Join(", ", e.ChatMessage.Badges.Select(b => b.Key + " = " + b.Value));
         
         if (parts.Length == 1) {
-            Logger.LogInformation($"Voice: {voice}; Priority: {priority}; Message: {message}; Month: {m.SubscribedMonthCount}; {badgesString}");
-            Player.Add(new TTSMessage() {
+            _logger.LogInformation($"Voice: {voice}; Priority: {priority}; Message: {message}; Month: {m.SubscribedMonthCount}; {badgesString}");
+            _player.Add(new TTSMessage() {
                 Voice = voice,
                 Message = message,
                 Moderator = m.IsModerator,
@@ -189,8 +215,8 @@ public class ChatMessageHandler {
             }
 
             if (!string.IsNullOrWhiteSpace(parts[i * 2])) {
-                Logger.LogInformation($"Voice: {voice}; Priority: {priority}; Message: {parts[i * 2]}; Month: {m.SubscribedMonthCount}; {badgesString}");
-                Player.Add(new TTSMessage() {
+                _logger.LogInformation($"Username: {m.Username}; User ID: {m.UserId}; Voice: {voice}; Priority: {priority}; Message: {parts[i * 2]}; Month: {m.SubscribedMonthCount}; {badgesString}");
+                _player.Add(new TTSMessage() {
                     Voice = voice,
                     Message = parts[i * 2],
                     Moderator = m.IsModerator,
@@ -202,8 +228,8 @@ public class ChatMessageHandler {
                 });
             }
 
-            Logger.LogInformation($"Voice: {voice}; Priority: {priority}; SFX: {sfxName}; Month: {m.SubscribedMonthCount}; {badgesString}");
-            Player.Add(new TTSMessage() {
+            _logger.LogInformation($"Username: {m.Username}; User ID: {m.UserId}; Voice: {voice}; Priority: {priority}; SFX: {sfxName}; Month: {m.SubscribedMonthCount}; {badgesString}");
+            _player.Add(new TTSMessage() {
                 Voice = voice,
                 Message = sfxName,
                 File = $"sfx/{sfxName}.mp3",
@@ -217,8 +243,8 @@ public class ChatMessageHandler {
         }
 
         if (!string.IsNullOrWhiteSpace(parts.Last())) {
-            Logger.LogInformation($"Voice: {voice}; Priority: {priority}; Message: {parts.Last()}; Month: {m.SubscribedMonthCount}; {badgesString}");
-            Player.Add(new TTSMessage() {
+            _logger.LogInformation($"Username: {m.Username}; User ID: {m.UserId}; Voice: {voice}; Priority: {priority}; Message: {parts.Last()}; Month: {m.SubscribedMonthCount}; {badgesString}");
+            _player.Add(new TTSMessage() {
                 Voice = voice,
                 Message = parts.Last(),
                 Moderator = m.IsModerator,
@@ -229,14 +255,5 @@ public class ChatMessageHandler {
                 Priority = priority
             });
         }
-    }
-
-    private Regex? GenerateEnabledVoicesRegex() {
-        if (Context.EnabledVoices == null || Context.EnabledVoices.Count() <= 0) {
-            return null;
-        }
-
-        var enabledVoicesString = string.Join("|", Context.EnabledVoices.Select(v => v.Label));
-        return new Regex($@"\b({enabledVoicesString})\:(.*?)(?=\Z|\b(?:{enabledVoicesString})\:)", RegexOptions.IgnoreCase);
     }
 }

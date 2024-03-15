@@ -6,6 +6,8 @@ public class TTSPlayer {
     private Mutex _mutex;
     private Mutex _mutex2;
 
+    public ISampleProvider? Playing { get; set; }
+
     public TTSPlayer() {
         _messages = new PriorityQueue<TTSMessage, int>();
         _buffer = new PriorityQueue<TTSMessage, int>();

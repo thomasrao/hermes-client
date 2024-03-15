@@ -3,8 +3,8 @@ namespace TwitchChatTTS.OBS.Socket.Data
     [Serializable]
     public class EventMessage
     {
-        public string eventType { get; set; }
-        public int eventIntent { get; set; }
-        public Dictionary<string, object> eventData { get; set; }
+        public string EventType { get; set; }
+        public int EventIntent { get; set; }
+        public Dictionary<string, object> EventData { get; set; }
     }
 }

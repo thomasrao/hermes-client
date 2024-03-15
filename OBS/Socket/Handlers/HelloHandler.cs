@@ -25,14 +25,13 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                 return;
 
             Logger.LogTrace("OBS websocket password: " + Context.Password);
-            if (obj.authentication is null || Context.Password is null) // TODO: send re-identify message.
+            if (obj.Authentication == null || Context.Password == null) // TODO: send re-identify message.
                 return;
             
-            var salt = obj.authentication.salt;
-            var challenge = obj.authentication.challenge;
+            var salt = obj.Authentication.Salt;
+            var challenge = obj.Authentication.Challenge;
             Logger.LogTrace("Salt: " + salt);
             Logger.LogTrace("Challenge: " + challenge);
-            
             
             string secret = Context.Password + salt;
             byte[] bytes = Encoding.UTF8.GetBytes(secret);
@@ -48,8 +47,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             }
 
             Logger.LogTrace("Final hash: " + hash);
-            //await sender.Send(1, new IdentifyMessage(obj.rpcVersion, hash, 1023 | 262144 | 524288));
-            await sender.Send(1, new IdentifyMessage(obj.rpcVersion, hash, 1023 | 262144));
+            await sender.Send(1, new IdentifyMessage(obj.RpcVersion, hash, 1023 | 262144));
         }
     }
 }

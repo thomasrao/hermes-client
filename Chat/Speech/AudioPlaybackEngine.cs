@@ -24,7 +24,7 @@ public class AudioPlaybackEngine : IDisposable
 
     private ISampleProvider ConvertToRightChannelCount(ISampleProvider? input)
     {
-        if (input is null)
+        if (input == null)
             throw new NullReferenceException(nameof(input));
 
         if (input.WaveFormat.Channels == mixer.WaveFormat.Channels)

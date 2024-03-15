@@ -1,18 +1,18 @@
 using System.Text.Json;
 using TwitchChatTTS.Helpers;
 using Microsoft.Extensions.Logging;
-using TwitchChatTTS;
 using TwitchChatTTS.Seven;
 
 public class SevenApiClient {
+    public static readonly string API_URL = "https://7tv.io/v3";
+    public static readonly string WEBSOCKET_URL = "wss://events.7tv.io/v3";
+
     private WebClientWrap Web { get; }
-    private Configuration Configuration { get; }
     private ILogger<SevenApiClient> Logger { get; }
     private long? Id { get; }
 
 
-    public SevenApiClient(Configuration configuration, ILogger<SevenApiClient> logger, TwitchBotToken token) {
-        Configuration = configuration;
+    public SevenApiClient(ILogger<SevenApiClient> logger, TwitchBotToken token) {
         Logger = logger;
         Id = long.TryParse(token?.BroadcasterId, out long id) ? id : -1;
 
@@ -23,16 +23,16 @@ public class SevenApiClient {
     }
 
     public async Task<EmoteDatabase?> GetSevenEmotes() {
-        if (Id is null)
+        if (Id == null)
             throw new NullReferenceException(nameof(Id));
         
         try {
-            var details = await Web.GetJson<UserDetails>("https://7tv.io/v3/users/twitch/" + Id);
-            if (details is null)
+            var details = await Web.GetJson<UserDetails>($"{API_URL}/users/twitch/" + Id);
+            if (details == null)
                 return null;
             
             var emotes = new EmoteDatabase();
-            if (details.EmoteSet is not null)
+            if (details.EmoteSet != null)
                 foreach (var emote in details.EmoteSet.Emotes)
                     emotes.Add(emote.Name, emote.Id);
             Logger.LogInformation($"Loaded {details.EmoteSet?.Emotes.Count() ?? 0} emotes from 7tv.");

@@ -1,6 +1,6 @@
 public enum MessageResult {
-    Skip = 1,
-    SkipAll = 2,
-    Blocked = 3,
-    None = 0
+    None = 0,
+    NotReady = 1,
+    Blocked = 2,
+    Command = 3
 }

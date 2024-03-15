@@ -1,4 +1,3 @@
-using TwitchChatTTS.OBS.Socket.Manager;
 using CommonSocketLibrary.Common;
 using CommonSocketLibrary.Abstract;
 using Microsoft.Extensions.DependencyInjection;

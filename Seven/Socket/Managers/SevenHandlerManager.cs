@@ -3,7 +3,7 @@ using CommonSocketLibrary.Socket.Manager;
 using CommonSocketLibrary.Common;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace TwitchChatTTS.Seven.Socket.Manager
+namespace TwitchChatTTS.Seven.Socket.Managers
 {
     public class SevenHandlerManager : WebSocketHandlerManager
     {

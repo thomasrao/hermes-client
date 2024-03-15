@@ -3,9 +3,9 @@ namespace TwitchChatTTS.OBS.Socket.Data
     [Serializable]
     public class RequestResponseMessage
     {
-        public string requestType { get; set; }
-        public string requestId { get; set; }
-        public object requestStatus { get; set; }
-        public Dictionary<string, object> responseData { get; set; }
+        public string RequestType { get; set; }
+        public string RequestId { get; set; }
+        public object RequestStatus { get; set; }
+        public Dictionary<string, object> ResponseData { get; set; }
     }
 }

@@ -3,137 +3,160 @@ using TwitchChatTTS.Helpers;
 using Microsoft.Extensions.Logging;
 using TwitchChatTTS;
 using TwitchLib.Api.Core.Exceptions;
-using TwitchLib.Client;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
-using TwitchLib.Communication.Clients;
 using TwitchLib.Communication.Events;
-using TwitchLib.PubSub;
 using static TwitchChatTTS.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using CommonSocketLibrary.Abstract;
+using CommonSocketLibrary.Common;
+using TwitchLib.PubSub.Interfaces;
+using TwitchLib.Client.Interfaces;
+using TwitchChatTTS.OBS.Socket;
 
 public class TwitchApiClient {
-    private TwitchBotToken Token { get; }
-    private TwitchClient Client { get; }
-    private TwitchPubSub Publisher { get; }
-    private WebClientWrap Web { get; }
-    private Configuration Configuration { get; }
-    private ILogger<TwitchApiClient> Logger { get; }
-    private bool Initialized { get; set; }
+    private readonly Configuration _configuration;
+    private readonly ILogger<TwitchApiClient> _logger;
+    private readonly TwitchBotToken _token;
+    private readonly ITwitchClient _client;
+    private readonly ITwitchPubSub _publisher;
+    private readonly WebClientWrap Web;
+    private readonly IServiceProvider _serviceProvider;
+    private bool Initialized;
 
 
-    public TwitchApiClient(Configuration configuration, ILogger<TwitchApiClient> logger, TwitchBotToken token) {
-        Configuration = configuration;
-        Logger = logger;
-        Client = new TwitchClient(new WebSocketClient());
-        Publisher = new TwitchPubSub();
+    public TwitchApiClient(
+        Configuration configuration,
+        ILogger<TwitchApiClient> logger,
+        TwitchBotToken token,
+        ITwitchClient twitchClient,
+        ITwitchPubSub twitchPublisher,
+        IServiceProvider serviceProvider
+    ) {
+        _configuration = configuration;
+        _logger = logger;
+        _token = token;
+        _client = twitchClient;
+        _publisher = twitchPublisher;
+        _serviceProvider = serviceProvider;
         Initialized = false;
-        Token = token;
 
         Web = new WebClientWrap(new JsonSerializerOptions() {
             PropertyNameCaseInsensitive = false,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
         });
-        if (!string.IsNullOrWhiteSpace(Configuration.Hermes?.Token))
-            Web.AddHeader("x-api-key", Configuration.Hermes?.Token);
+        if (!string.IsNullOrWhiteSpace(_configuration.Hermes?.Token))
+            Web.AddHeader("x-api-key", _configuration.Hermes.Token.Trim());
     }
 
     public async Task Authorize() {
         try {
             var authorize = await Web.GetJson<TwitchBotAuth>("https://hermes.goblincaves.com/api/account/reauthorize");
-            if (authorize != null && Token.BroadcasterId == authorize.BroadcasterId) {
-                Token.AccessToken = authorize.AccessToken;
-                Token.RefreshToken = authorize.RefreshToken;
-                Logger.LogInformation("Updated Twitch API tokens.");
+            if (authorize != null && _token.BroadcasterId == authorize.BroadcasterId) {
+                _token.AccessToken = authorize.AccessToken;
+                _token.RefreshToken = authorize.RefreshToken;
+                _logger.LogInformation("Updated Twitch API tokens.");
             } else if (authorize != null) {
-                Logger.LogError("Twitch API Authorization failed.");
+                _logger.LogError("Twitch API Authorization failed.");
             }
         } catch (HttpResponseException e) {
-            if (string.IsNullOrWhiteSpace(Configuration.Hermes?.Token))
-                Logger.LogError("No Hermes API key found. Enter it into the configuration file.");
+            if (string.IsNullOrWhiteSpace(_configuration.Hermes?.Token))
+                _logger.LogError("No Hermes API key found. Enter it into the configuration file.");
             else
-                Logger.LogError("Invalid Hermes API key. Double check the token. HTTP Error Code: " + e.HttpResponse.StatusCode);
+                _logger.LogError("Invalid Hermes API key. Double check the token. HTTP Error Code: " + e.HttpResponse.StatusCode);
         } catch (JsonException) {
         } catch (Exception e) {
-            Logger.LogError(e, "Failed to authorize to Twitch API.");
+            _logger.LogError(e, "Failed to authorize to Twitch API.");
         }
     }
 
     public async Task Connect() {
-        Client.Connect();
-        await Publisher.ConnectAsync();
+        _client.Connect();
+        await _publisher.ConnectAsync();
     }
 
-    public void InitializeClient(HermesClient hermes, IEnumerable<string> channels) {
-        ConnectionCredentials credentials = new ConnectionCredentials(hermes.Username, Token?.AccessToken);
-        Client.Initialize(credentials, channels.Distinct().ToList());
+    public void InitializeClient(string username, IEnumerable<string> channels) {
+        ConnectionCredentials credentials = new ConnectionCredentials(username, _token?.AccessToken);
+        _client.Initialize(credentials, channels.Distinct().ToList());
 
         if (Initialized) {
-            Logger.LogDebug("Twitch API client has already been initialized.");
+            _logger.LogDebug("Twitch API client has already been initialized.");
             return;
         }
 
         Initialized = true;
 
-        Client.OnJoinedChannel += async Task (object? s, OnJoinedChannelArgs e) => {
-            Logger.LogInformation("Joined channel: " + e.Channel);
+        _client.OnJoinedChannel += async Task (object? s, OnJoinedChannelArgs e) => {
+            _logger.LogInformation("Joined channel: " + e.Channel);
         };
 
-        Client.OnConnected += async Task (object? s, OnConnectedArgs e) => {
-            Logger.LogInformation("-----------------------------------------------------------");
+        _client.OnConnected += async Task (object? s, OnConnectedArgs e) => {
+            _logger.LogInformation("-----------------------------------------------------------");
         };
 
-        Client.OnIncorrectLogin += async Task (object? s, OnIncorrectLoginArgs e) => {
-            Logger.LogError(e.Exception, "Incorrect Login on Twitch API client.");
+        _client.OnIncorrectLogin += async Task (object? s, OnIncorrectLoginArgs e) => {
+            _logger.LogError(e.Exception, "Incorrect Login on Twitch API client.");
 
-            Logger.LogInformation("Attempting to re-authorize.");
+            _logger.LogInformation("Attempting to re-authorize.");
             await Authorize();
         };
 
-        Client.OnConnectionError += async Task (object? s, OnConnectionErrorArgs e) => {
-            Logger.LogError("Connection Error: " + e.Error.Message + " (" + e.Error.GetType().Name + ")");
+        _client.OnConnectionError += async Task (object? s, OnConnectionErrorArgs e) => {
+            _logger.LogError("Connection Error: " + e.Error.Message + " (" + e.Error.GetType().Name + ")");
+
+            _logger.LogInformation("Attempting to re-authorize.");
+            await Authorize();
         };
 
-        Client.OnError += async Task (object? s, OnErrorEventArgs e) => {
-            Logger.LogError(e.Exception, "Twitch API client error.");
+        _client.OnError += async Task (object? s, OnErrorEventArgs e) => {
+            _logger.LogError(e.Exception, "Twitch API client error.");
         };
     }
 
     public void InitializePublisher() {
-        Publisher.OnPubSubServiceConnected += async (s, e) => {
-            Publisher.ListenToChannelPoints(Token.BroadcasterId);
-            Publisher.ListenToFollows(Token.BroadcasterId);
+        _publisher.OnPubSubServiceConnected += async (s, e) => {
+            _publisher.ListenToChannelPoints(_token.BroadcasterId);
+            _publisher.ListenToFollows(_token.BroadcasterId);
 
-            await Publisher.SendTopicsAsync(Token.AccessToken);
-            Logger.LogInformation("Twitch PubSub has been connected.");
+            await _publisher.SendTopicsAsync(_token.AccessToken);
+            _logger.LogInformation("Twitch PubSub has been connected.");
         };
 
-        Publisher.OnFollow += (s, e) => {
-            Logger.LogInformation("Follow: " + e.DisplayName);
+        _publisher.OnFollow += (s, e) => {
+            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs") as OBSSocketClient;
+            if (_configuration.Twitch?.TtsWhenOffline != true && client?.Live == false)
+                return;
+            
+            _logger.LogInformation("Follow: " + e.DisplayName);
         };
 
-        Publisher.OnChannelPointsRewardRedeemed += (s, e) => {
-            Logger.LogInformation($"Channel Point Reward Redeemed: {e.RewardRedeemed.Redemption.Reward.Title} (id: {e.RewardRedeemed.Redemption.Id})");
+        _publisher.OnChannelPointsRewardRedeemed += (s, e) => {
+            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs") as OBSSocketClient;
+            if (_configuration.Twitch?.TtsWhenOffline != true && client?.Live == false)
+                return;
 
-            if (Configuration.Twitch?.Redeems is null) {
-                Logger.LogDebug("No redeems found in the configuration.");
+            _logger.LogInformation($"Channel Point Reward Redeemed: {e.RewardRedeemed.Redemption.Reward.Title} (id: {e.RewardRedeemed.Redemption.Id})");
+
+            if (_configuration.Twitch?.Redeems == null) {
+                _logger.LogDebug("No redeems found in the configuration.");
                 return;
             }
 
             var redeemName = e.RewardRedeemed.Redemption.Reward.Title.ToLower().Trim().Replace(" ", "-");
-            if (!Configuration.Twitch.Redeems.TryGetValue(redeemName, out RedeemConfiguration? redeem))
+            if (!_configuration.Twitch.Redeems.TryGetValue(redeemName, out RedeemConfiguration? redeem))
                 return;
 
-            if (redeem is null)
+            if (redeem == null)
                 return;
             
             // Write or append to file if needed.
             var outputFile = string.IsNullOrWhiteSpace(redeem.OutputFilePath) ? null : redeem.OutputFilePath.Trim();
-            if (outputFile is null) {
-                Logger.LogDebug($"No output file was provided for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
+            if (outputFile == null) {
+                _logger.LogDebug($"No output file was provided for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
             } else {
                 var outputContent = string.IsNullOrWhiteSpace(redeem.OutputContent) ? null : redeem.OutputContent.Trim().Replace("%USER%", e.RewardRedeemed.Redemption.User.DisplayName).Replace("\\n", "\n");
-                if (outputContent is null) {
-                    Logger.LogWarning($"No output content was provided for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
+                if (outputContent == null) {
+                    _logger.LogWarning($"No output content was provided for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
                 } else {
                     if (redeem.OutputAppend == true) {
                         File.AppendAllText(outputFile, outputContent + "\n");
@@ -145,12 +168,12 @@ public class TwitchApiClient {
 
             // Play audio file if needed.
             var audioFile = string.IsNullOrWhiteSpace(redeem.AudioFilePath) ? null : redeem.AudioFilePath.Trim();
-            if (audioFile is null) {
-                Logger.LogDebug($"No audio file was provided for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
+            if (audioFile == null) {
+                _logger.LogDebug($"No audio file was provided for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
                 return;
             }
             if (!File.Exists(audioFile)) {
-                Logger.LogWarning($"Cannot find audio file @ {audioFile} for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
+                _logger.LogWarning($"Cannot find audio file @ {audioFile} for redeem '{e.RewardRedeemed.Redemption.Reward.Title}'.");
                 return;
             }
             
@@ -179,6 +202,6 @@ public class TwitchApiClient {
     }
 
     public void AddOnNewMessageReceived(AsyncEventHandler<OnMessageReceivedArgs> handler) {
-        Client.OnMessageReceived += handler;
+        _client.OnMessageReceived += handler;
     }
 }

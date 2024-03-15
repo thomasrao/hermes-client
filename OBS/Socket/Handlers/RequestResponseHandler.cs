@@ -19,13 +19,13 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             if (message is not RequestResponseMessage obj || obj == null)
                 return;
             
-            switch (obj.requestType) {
+            switch (obj.RequestType) {
                 case "GetOutputStatus":
                     if (sender is not OBSSocketClient client)
                         return;
                     
-                    if (obj.requestId == "stream") {
-                        client.Live = obj.responseData["outputActive"].ToString() == "True";
+                    if (obj.RequestId == "stream") {
+                        client.Live = obj.ResponseData["outputActive"].ToString() == "True";
                         Logger.LogWarning("Updated stream's live status to " + client.Live);
                     }
                     break;

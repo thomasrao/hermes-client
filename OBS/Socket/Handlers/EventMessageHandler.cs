@@ -21,15 +21,15 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             if (message is not EventMessage obj || obj == null)
                 return;
 
-            switch (obj.eventType) {
+            switch (obj.EventType) {
                 case "StreamStateChanged":
                 case "RecordStateChanged":
                     if (sender is not OBSSocketClient client)
                         return;
                     
-                    string? raw_state = obj.eventData["outputState"].ToString();
+                    string? raw_state = obj.EventData["outputState"].ToString();
                     string? state = raw_state?.Substring(21).ToLower();
-                    client.Live = obj.eventData["outputActive"].ToString() == "True";
+                    client.Live = obj.EventData["outputActive"].ToString() == "True";
                     Logger.LogWarning("Stream " + (state != null && state.EndsWith("ing") ? "is " : "has ") + state + ".");
 
                     if (client.Live == false && state != null && !state.EndsWith("ing")) {
@@ -37,7 +37,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                     }
                     break;
                 default:
-                    Logger.LogDebug(obj.eventType + " EVENT: " + string.Join(" | ", obj.eventData?.Select(x => x.Key + "=" + x.Value?.ToString()) ?? new string[0]));
+                    Logger.LogDebug(obj.EventType + " EVENT: " + string.Join(" | ", obj.EventData?.Select(x => x.Key + "=" + x.Value?.ToString()) ?? new string[0]));
                     break;
             }
         }

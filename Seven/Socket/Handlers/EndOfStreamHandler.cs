@@ -10,6 +10,7 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
     public class EndOfStreamHandler : IWebSocketHandler
     {
         private ILogger Logger { get; }
+        private Configuration Configuration { get; }
         private IServiceProvider ServiceProvider { get; }
         private string[] ErrorCodes { get; }
         private int[] ReconnectDelay { get; }
@@ -17,8 +18,9 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
         public int OperationCode { get; set; } = 7;
         
 
-        public EndOfStreamHandler(ILogger<EndOfStreamHandler> logger, IServiceProvider serviceProvider) {
+        public EndOfStreamHandler(ILogger<EndOfStreamHandler> logger, Configuration configuration, IServiceProvider serviceProvider) {
             Logger = logger;
+            Configuration = configuration;
             ServiceProvider = serviceProvider;
 
             ErrorCodes = [
@@ -71,17 +73,23 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                 return;
             }
 
+            if (string.IsNullOrWhiteSpace(Configuration.Seven?.UserId))
+                return;
+
             var context = ServiceProvider.GetRequiredService<ReconnectContext>();
             await Task.Delay(ReconnectDelay[code]);
 
-            Logger.LogInformation($"7tv client reconnecting.");
-            await sender.ConnectAsync($"{context.Protocol ?? "wss"}://{context.Url}");
-            if (context.SessionId is null) {
-                await sender.Send(33, new object());
+            //var base_url = "@" + string.Join(",", Configuration.Seven.SevenId.Select(sub => sub.Type + "<" + string.Join(",", sub.Condition?.Select(e => e.Key + "=" + e.Value) ?? new string[0]) + ">"));
+            var base_url = $"@emote_set.*<object_id={Configuration.Seven.UserId.Trim()}>";
+            string url = $"{SevenApiClient.WEBSOCKET_URL}{base_url}";
+            Logger.LogDebug($"7tv websocket reconnecting to {url}.");
+
+            await sender.ConnectAsync(url);
+            if (context.SessionId != null) {
+                await sender.Send(34, new ResumeMessage() { SessionId = context.SessionId });
+                Logger.LogInformation("Resumed connection to 7tv websocket.");
             } else {
-                await sender.Send(34, new ResumeMessage() {
-                    SessionId = context.SessionId
-                });
+                Logger.LogDebug("7tv websocket session id not available.");
             }
         }
     }

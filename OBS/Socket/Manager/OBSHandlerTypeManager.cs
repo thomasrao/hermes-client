@@ -10,8 +10,7 @@ namespace TwitchChatTTS.OBS.Socket.Manager
     {
         public OBSHandlerTypeManager(
             ILogger<OBSHandlerTypeManager> factory,
-            [FromKeyedServices("obs")] HandlerManager<WebSocketClient,
-            IWebSocketHandler> handlers
+            [FromKeyedServices("obs")] HandlerManager<WebSocketClient, IWebSocketHandler> handlers
         ) : base(factory, handlers)
         {
         }

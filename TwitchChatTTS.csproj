@@ -35,5 +35,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CommonSocketLibrary\CommonSocketLibrary.csproj" />
+    <ProjectReference Include="..\HermesSocketLibrary\HermesSocketLibrary.csproj" />
   </ItemGroup>
 </Project>

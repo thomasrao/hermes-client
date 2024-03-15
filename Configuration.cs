@@ -1,5 +1,3 @@
-using TwitchChatTTS.Seven.Socket.Context;
-
 namespace TwitchChatTTS
 {
     public class Configuration
@@ -39,10 +37,7 @@ namespace TwitchChatTTS
         }
 
         public class SevenConfiguration {
-            public string? Protocol;
-            public string? Url;
-
-            public IEnumerable<SevenSubscriptionConfiguration>? InitialSubscriptions;
+            public string? UserId;
         }
     }
 }

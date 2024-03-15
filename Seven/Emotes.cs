@@ -73,7 +73,6 @@ namespace TwitchChatTTS.Seven
         public IList<Emote> Emotes { get; set; }
         public int EmoteCount { get; set; }
         public int Capacity { get; set; }
-
     }
 
     public class Emote {

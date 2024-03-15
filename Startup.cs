@@ -7,37 +7,29 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
-using TwitchChatTTS.Twitch;
 using Microsoft.Extensions.Logging;
-using TwitchChatTTS.Seven.Socket.Manager;
 using TwitchChatTTS.Seven.Socket;
 using TwitchChatTTS.OBS.Socket.Handlers;
 using TwitchChatTTS.Seven.Socket.Handlers;
 using TwitchChatTTS.Seven.Socket.Context;
 using TwitchChatTTS.Seven;
 using TwitchChatTTS.OBS.Socket.Context;
-
-/**
-Future handshake/connection procedure:
-- GET all tts config data
-- Continuous connection to server to receive commands from tom & send logs/errors (med priority, though tough task)
-
-Ideas:
-- Filter messages by badges.
-- Speed up TTS based on message queue size?
-- Cut TTS off shortly after raid (based on size of raid)?
-- Limit duration of TTS
-**/
+using TwitchLib.Client.Interfaces;
+using TwitchLib.Client;
+using TwitchLib.PubSub.Interfaces;
+using TwitchLib.PubSub;
+using TwitchLib.Communication.Interfaces;
+using TwitchChatTTS.Seven.Socket.Managers;
+using TwitchChatTTS.Hermes.Socket.Handlers;
+using TwitchChatTTS.Hermes.Socket;
+using TwitchChatTTS.Hermes.Socket.Managers;
+using TwitchChatTTS.Chat.Commands.Parameters;
+using TwitchChatTTS.Chat.Commands;
+using System.Text.Json;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
 // SE voices: https://api.streamelements.com/kappa/v2/speech?voice=brian&text=hello
-
-// TODO:
-// Fix OBS/7tv websocket connections when not available.
-// Make it possible to do things at end of streams.
-// Update emote database with twitch emotes.
-// Event Subscription for emote usage?
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 var s = builder.Services;
@@ -49,7 +41,7 @@ var deserializer = new DeserializerBuilder()
 var configContent = File.ReadAllText("tts.config.yml");
 var configuration = deserializer.Deserialize<Configuration>(configContent);
 var redeemKeys = configuration.Twitch?.Redeems?.Keys;
-if (redeemKeys is not null) {
+if (redeemKeys != null) {
     foreach (var key in redeemKeys) {
         if (key != key.ToLower() && configuration.Twitch?.Redeems != null)
             configuration.Twitch.Redeems.Add(key.ToLower(), configuration.Twitch.Redeems[key]);
@@ -58,45 +50,35 @@ if (redeemKeys is not null) {
 s.AddSingleton<Configuration>(configuration);
 
 s.AddLogging();
+s.AddSingleton<User>(new User());
 
-s.AddSingleton<TTSContext>(sp => {
-    var context = new TTSContext();
-    var logger = sp.GetRequiredService<ILogger<TTSContext>>();
-    var hermes = sp.GetRequiredService<HermesClient>();
-
-    logger.LogInformation("Fetching TTS username filters...");
-    var usernameFiltersList = hermes.FetchTTSUsernameFilters();
-    usernameFiltersList.Wait();
-    context.UsernameFilters = usernameFiltersList.Result.Where(x => x.Username != null).ToDictionary(x => x.Username ?? "", x => x);
-    logger.LogInformation($"{context.UsernameFilters.Where(f => f.Value.Tag == "blacklisted").Count()} username(s) have been blocked.");
-    logger.LogInformation($"{context.UsernameFilters.Where(f => f.Value.Tag == "priority").Count()} user(s) have been prioritized.");
-
-    var enabledVoices = hermes.FetchTTSEnabledVoices();
-    enabledVoices.Wait();
-    context.EnabledVoices = enabledVoices.Result;
-    logger.LogInformation($"{context.EnabledVoices.Count()} TTS voices enabled.");
-
-    var wordFilters = hermes.FetchTTSWordFilters();
-    wordFilters.Wait();
-    context.WordFilters = wordFilters.Result;
-    logger.LogInformation($"{context.WordFilters.Count()} TTS word filters.");
-
-    var defaultVoice = hermes.FetchTTSDefaultVoice();
-    defaultVoice.Wait();
-    context.DefaultVoice = defaultVoice.Result ?? "Brian";
-    logger.LogInformation("Default Voice: " + context.DefaultVoice);
-
-    return context;
+s.AddSingleton<JsonSerializerOptions>(new JsonSerializerOptions() {
+    PropertyNameCaseInsensitive = false,
+    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
 });
+
+// Command parameters
+s.AddKeyedSingleton<ChatCommandParameter, TTSVoiceNameParameter>("parameter-ttsvoicename");
+s.AddKeyedSingleton<ChatCommandParameter, UnvalidatedParameter>("parameter-unvalidated");
+s.AddKeyedSingleton<ChatCommand, SkipAllCommand>("command-skipall");
+s.AddKeyedSingleton<ChatCommand, SkipCommand>("command-skip");
+s.AddKeyedSingleton<ChatCommand, VoiceCommand>("command-voice");
+s.AddKeyedSingleton<ChatCommand, AddTTSVoiceCommand>("command-addttsvoice");
+s.AddKeyedSingleton<ChatCommand, RemoveTTSVoiceCommand>("command-removettsvoice");
+s.AddSingleton<ChatCommandManager>();
+
 s.AddSingleton<TTSPlayer>();
 s.AddSingleton<ChatMessageHandler>();
 s.AddSingleton<HermesClient>();
-s.AddTransient<TwitchBotToken>(sp => {
+s.AddSingleton<TwitchBotToken>(sp => {
     var hermes = sp.GetRequiredService<HermesClient>();
     var task = hermes.FetchTwitchBotToken();
     task.Wait();
     return task.Result;
 });
+s.AddTransient<IClient, TwitchLib.Communication.Clients.WebSocketClient>();
+s.AddTransient<ITwitchClient, TwitchClient>();
+s.AddTransient<ITwitchPubSub, TwitchPubSub>();
 s.AddSingleton<TwitchApiClient>();
 
 s.AddSingleton<SevenApiClient>();
@@ -106,14 +88,11 @@ s.AddSingleton<EmoteDatabase>(sp => {
     task.Wait();
     return task.Result;
 });
-var emoteCounter = new EmoteCounter();
-if (!string.IsNullOrWhiteSpace(configuration.Emotes?.CounterFilePath) && File.Exists(configuration.Emotes.CounterFilePath.Trim())) {
-    var d = new DeserializerBuilder()
-        .WithNamingConvention(HyphenatedNamingConvention.Instance)
-        .Build();
-    emoteCounter = deserializer.Deserialize<EmoteCounter>(File.ReadAllText(configuration.Emotes.CounterFilePath.Trim()));
-}
-s.AddSingleton<EmoteCounter>(emoteCounter);
+s.AddSingleton<EmoteCounter>(sp => {
+    if (!string.IsNullOrWhiteSpace(configuration.Emotes?.CounterFilePath) && File.Exists(configuration.Emotes.CounterFilePath.Trim()))
+        return deserializer.Deserialize<EmoteCounter>(File.ReadAllText(configuration.Emotes.CounterFilePath.Trim()));
+    return new EmoteCounter();
+});
 
 // OBS websocket
 s.AddSingleton<HelloContext>(sp =>
@@ -135,34 +114,16 @@ s.AddKeyedSingleton<SocketClient<WebSocketMessage>, OBSSocketClient>("obs");
 // 7tv websocket
 s.AddTransient(sp => {
     var logger = sp.GetRequiredService<ILogger<ReconnectContext>>();
-    var configuration = sp.GetRequiredService<Configuration>();
     var client = sp.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("7tv") as SevenSocketClient;
     if (client == null) {
-        logger.LogError("7tv client is null.");
-        return new ReconnectContext() {
-            Protocol = configuration.Seven?.Protocol,
-            Url = configuration.Seven?.Url,
-            SessionId = null
-        };
+        logger.LogError("7tv client == null.");
+        return new ReconnectContext() { SessionId = null };
     }
     if (client.ConnectionDetails == null) {
-        logger.LogError("Connection details in 7tv client is null.");
-        return new ReconnectContext() {
-            Protocol = configuration.Seven?.Protocol,
-            Url = configuration.Seven?.Url,
-            SessionId = null
-        };
+        logger.LogError("Connection details in 7tv client == null.");
+        return new ReconnectContext() { SessionId = null };
     }
-    return new ReconnectContext() {
-        Protocol = configuration.Seven?.Protocol,
-        Url = configuration.Seven?.Url,
-        SessionId = client.ConnectionDetails.SessionId
-    };
-});
-s.AddSingleton<SevenHelloContext>(sp => {
-    return new SevenHelloContext() {
-        Subscriptions = configuration.Seven?.InitialSubscriptions
-    };
+    return new ReconnectContext() { SessionId = client.ConnectionDetails.SessionId };
 });
 s.AddKeyedSingleton<IWebSocketHandler, SevenHelloHandler>("7tv-sevenhello");
 s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("7tv-hello");
@@ -175,9 +136,17 @@ s.AddKeyedSingleton<HandlerManager<WebSocketClient, IWebSocketHandler>, SevenHan
 s.AddKeyedSingleton<HandlerTypeManager<WebSocketClient, IWebSocketHandler>, SevenHandlerTypeManager>("7tv");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");
 
+// hermes websocket
+s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes-heartbeat");
+s.AddKeyedSingleton<IWebSocketHandler, LoginAckHandler>("hermes-loginack");
+s.AddKeyedSingleton<IWebSocketHandler, RequestAckHandler>("hermes-requestack");
+s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes-error");
+
+s.AddKeyedSingleton<HandlerManager<WebSocketClient, IWebSocketHandler>, HermesHandlerManager>("hermes");
+s.AddKeyedSingleton<HandlerTypeManager<WebSocketClient, IWebSocketHandler>, HermesHandlerTypeManager>("hermes");
+s.AddKeyedSingleton<SocketClient<WebSocketMessage>, HermesSocketClient>("hermes");
+
 s.AddHostedService<TTS>();
 
 using IHost host = builder.Build();
-using IServiceScope scope = host.Services.CreateAsyncScope();
-IServiceProvider provider = scope.ServiceProvider;
 await host.RunAsync();

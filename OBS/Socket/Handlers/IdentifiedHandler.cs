@@ -20,7 +20,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                 return;
             
             sender.Connected = true;
-            Logger.LogInformation("Connected to OBS via rpc version " + obj.negotiatedRpcVersion + ".");
+            Logger.LogInformation("Connected to OBS via rpc version " + obj.NegotiatedRpcVersion + ".");
         }
     }
 }

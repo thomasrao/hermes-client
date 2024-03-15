@@ -10,12 +10,12 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
     public class DispatchHandler : IWebSocketHandler
     {
         private ILogger Logger { get; }
-        private IServiceProvider ServiceProvider { get; }
+        private EmoteDatabase Emotes { get; }
         public int OperationCode { get; set; } = 0;
 
-        public DispatchHandler(ILogger<DispatchHandler> logger, IServiceProvider serviceProvider) {
+        public DispatchHandler(ILogger<DispatchHandler> logger, EmoteDatabase emotes) {
             Logger = logger;
-            ServiceProvider = serviceProvider;
+            Emotes = emotes;
         }
 
         public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
@@ -23,23 +23,31 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
             if (message is not DispatchMessage obj || obj == null)
                 return;
             
-            Do(obj?.Body?.Pulled, cf => cf.OldValue);
-            Do(obj?.Body?.Pushed, cf => cf.Value);
+            ApplyChanges(obj?.Body?.Pulled, cf => cf.OldValue, true);
+            ApplyChanges(obj?.Body?.Pushed, cf => cf.Value, false);
         }
 
-        private void Do(IEnumerable<ChangeField>? fields, Func<ChangeField, object> getter) {
-            if (fields is null)
+        private void ApplyChanges(IEnumerable<ChangeField>? fields, Func<ChangeField, object> getter, bool removing) {
+            if (fields == null)
                 return;
             
-            //ServiceProvider.GetRequiredService<EmoteDatabase>()
             foreach (var val in fields) {
-                if (getter(val) == null)
+                var value = getter(val);
+                if (value == null)
                     continue;
                 
-                var o = JsonSerializer.Deserialize<EmoteField>(val.OldValue.ToString(), new JsonSerializerOptions() {
+                var o = JsonSerializer.Deserialize<EmoteField>(value.ToString(), new JsonSerializerOptions() {
                     PropertyNameCaseInsensitive = false,
                     PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
                 });
+
+                if (removing) {
+                    Emotes.Remove(o.Name);
+                    Logger.LogInformation($"Removed 7tv emote: {o.Name} (id: {o.Id})");
+                } else {
+                    Emotes.Add(o.Name, o.Id);
+                    Logger.LogInformation($"Added 7tv emote: {o.Name} (id: {o.Id})");
+                }
             }
         }
     }
