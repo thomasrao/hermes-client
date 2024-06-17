@@ -7,12 +7,14 @@ public class NetworkWavSound
 
     public NetworkWavSound(string uri)
     {
-        using (var mfr = new MediaFoundationReader(uri)) {
+        using (var mfr = new MediaFoundationReader(uri))
+        {
             WaveFormat = mfr.WaveFormat;
 
             byte[] buffer = new byte[4096];
             int read = 0;
-            using (var ms = new MemoryStream()) {
+            using (var ms = new MemoryStream())
+            {
                 while ((read = mfr.Read(buffer, 0, buffer.Length)) > 0)
                     ms.Write(buffer, 0, read);
                 AudioData = ms.ToArray();

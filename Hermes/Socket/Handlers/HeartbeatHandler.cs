@@ -1,7 +1,7 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Socket.Data;
-using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace TwitchChatTTS.Hermes.Socket.Handlers
 {
@@ -10,7 +10,8 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         private ILogger _logger { get; }
         public int OperationCode { get; set; } = 0;
 
-        public HeartbeatHandler(ILogger<HeartbeatHandler> logger) {
+        public HeartbeatHandler(ILogger logger)
+        {
             _logger = logger;
         }
 
@@ -18,18 +19,22 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         {
             if (message is not HeartbeatMessage obj || obj == null)
                 return;
-            
-            if (sender is not HermesSocketClient client) {
+
+            if (sender is not HermesSocketClient client)
+            {
                 return;
             }
 
-            _logger.LogTrace("Received heartbeat.");
+            _logger.Verbose("Received heartbeat.");
 
-            client.LastHeartbeat = DateTime.UtcNow;
+            client.LastHeartbeatReceived = DateTime.UtcNow;
 
-            await sender.Send(0, new HeartbeatMessage() {
-                DateTime = DateTime.UtcNow
-            });
+            if (obj.Respond)
+                await sender.Send(0, new HeartbeatMessage()
+                {
+                    DateTime = DateTime.UtcNow,
+                    Respond = false
+                });
         }
     }
 }

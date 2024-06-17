@@ -1,6 +1,6 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.Seven.Socket.Data;
 
 namespace TwitchChatTTS.Seven.Socket.Handlers
@@ -10,7 +10,8 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
         private ILogger Logger { get; }
         public int OperationCode { get; set; } = 6;
 
-        public ErrorHandler(ILogger<ErrorHandler> logger) {
+        public ErrorHandler(ILogger logger)
+        {
             Logger = logger;
         }
 

@@ -14,7 +14,7 @@ public class AudioPlaybackEngine : IDisposable
     {
         SampleRate = sampleRate;
         outputDevice = new WaveOutEvent();
-        
+
         mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channelCount));
         mixer.ReadFully = true;
 
@@ -49,25 +49,41 @@ public class AudioPlaybackEngine : IDisposable
         AddMixerInput(new CachedWavProvider(sound));
     }
 
-    public ISampleProvider ConvertSound(IWaveProvider provider) {
+    public ISampleProvider ConvertSound(IWaveProvider provider)
+    {
         ISampleProvider? converted = null;
-        if (provider.WaveFormat.Encoding == WaveFormatEncoding.Pcm) {
-            if (provider.WaveFormat.BitsPerSample == 8) {
+        if (provider.WaveFormat.Encoding == WaveFormatEncoding.Pcm)
+        {
+            if (provider.WaveFormat.BitsPerSample == 8)
+            {
                 converted = new Pcm8BitToSampleProvider(provider);
-            } else if (provider.WaveFormat.BitsPerSample == 16) {
+            }
+            else if (provider.WaveFormat.BitsPerSample == 16)
+            {
                 converted = new Pcm16BitToSampleProvider(provider);
-            } else if (provider.WaveFormat.BitsPerSample == 24) {
+            }
+            else if (provider.WaveFormat.BitsPerSample == 24)
+            {
                 converted = new Pcm24BitToSampleProvider(provider);
-            } else if (provider.WaveFormat.BitsPerSample == 32) {
+            }
+            else if (provider.WaveFormat.BitsPerSample == 32)
+            {
                 converted = new Pcm32BitToSampleProvider(provider);
             }
-        } else if (provider.WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat) {
-            if (provider.WaveFormat.BitsPerSample == 64) {
+        }
+        else if (provider.WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat)
+        {
+            if (provider.WaveFormat.BitsPerSample == 64)
+            {
                 converted = new WaveToSampleProvider64(provider);
-            } else {
+            }
+            else
+            {
                 converted = new WaveToSampleProvider(provider);
             }
-        } else {
+        }
+        else
+        {
             throw new ArgumentException("Unsupported source encoding while adding to mixer.");
         }
         return ConvertToRightChannelCount(converted);
@@ -83,15 +99,18 @@ public class AudioPlaybackEngine : IDisposable
         mixer.AddMixerInput(input);
     }
 
-    public void RemoveMixerInput(ISampleProvider sound) {
+    public void RemoveMixerInput(ISampleProvider sound)
+    {
         mixer.RemoveMixerInput(sound);
     }
 
-    public void AddOnMixerInputEnded(EventHandler<SampleProviderEventArgs> e) {
+    public void AddOnMixerInputEnded(EventHandler<SampleProviderEventArgs> e)
+    {
         mixer.MixerInputEnded += e;
     }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         outputDevice.Dispose();
     }
 }

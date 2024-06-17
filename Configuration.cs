@@ -2,11 +2,11 @@ namespace TwitchChatTTS
 {
     public class Configuration
     {
+        public string Environment = "PROD";
+
         public HermesConfiguration? Hermes;
         public TwitchConfiguration? Twitch;
-        public EmotesConfiguration? Emotes;
         public OBSConfiguration? Obs;
-        public SevenConfiguration? Seven;
 
 
         public class HermesConfiguration {
@@ -26,18 +26,10 @@ namespace TwitchChatTTS
             public bool? OutputAppend;
         }
 
-        public class EmotesConfiguration {
-            public string? CounterFilePath;
-        }
-
         public class OBSConfiguration {
             public string? Host;
             public short? Port;
             public string? Password;
-        }
-
-        public class SevenConfiguration {
-            public string? UserId;
         }
     }
 }

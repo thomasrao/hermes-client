@@ -1,16 +1,20 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Socket.Data;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 
 namespace TwitchChatTTS.Hermes.Socket.Handlers
 {
     public class LoginAckHandler : IWebSocketHandler
     {
-        private ILogger _logger { get; }
+        private IServiceProvider _serviceProvider;
+        private ILogger _logger;
         public int OperationCode { get; set; } = 2;
 
-        public LoginAckHandler(ILogger<LoginAckHandler> logger) {
+        public LoginAckHandler(IServiceProvider serviceProvider, ILogger logger)
+        {
+            _serviceProvider = serviceProvider;
             _logger = logger;
         }
 
@@ -18,17 +22,45 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         {
             if (message is not LoginAckMessage obj || obj == null)
                 return;
-            
-            if (sender is not HermesSocketClient client) {
+
+            if (sender is not HermesSocketClient client)
                 return;
+
+            if (obj.AnotherClient)
+            {
+                _logger.Warning("Another client has connected to the same account.");
+            }
+            else
+            {
+                var user = _serviceProvider.GetRequiredService<User>();
+                client.UserId = obj.UserId;
+                _logger.Information($"Logged in as {user.TwitchUsername} (id: {client.UserId}).");
             }
 
-            if (obj.AnotherClient) {
-                _logger.LogWarning("Another client has connected to the same account.");
-            } else {
-                client.UserId = obj.UserId;
-                _logger.LogInformation($"Logged in as {client.UserId}.");
-            }
+            await client.Send(3, new RequestMessage()
+            {
+                Type = "get_tts_voices",
+                Data = null
+            });
+
+            var token = _serviceProvider.GetRequiredService<User>();
+            await client.Send(3, new RequestMessage()
+            {
+                Type = "get_tts_users",
+                Data = new Dictionary<string, object>() { { "user", token.HermesUserId } }
+            });
+
+            await client.Send(3, new RequestMessage()
+            {
+                Type = "get_chatter_ids",
+                Data = null
+            });
+
+            await client.Send(3, new RequestMessage()
+            {
+                Type = "get_emotes",
+                Data = null
+            });
         }
     }
 }

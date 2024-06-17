@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchLib.Client.Models;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -7,10 +7,11 @@ namespace TwitchChatTTS.Chat.Commands
     public class SkipCommand : ChatCommand
     {
         private IServiceProvider _serviceProvider;
-        private ILogger<SkipCommand> _logger;
+        private ILogger _logger;
 
-        public SkipCommand(IServiceProvider serviceProvider, ILogger<SkipCommand> logger)
-        : base("skip", "Skips the current text to speech message.") {
+        public SkipCommand(IServiceProvider serviceProvider, ILogger logger)
+        : base("skip", "Skips the current text to speech message.")
+        {
             _serviceProvider = serviceProvider;
             _logger = logger;
         }
@@ -25,11 +26,11 @@ namespace TwitchChatTTS.Chat.Commands
             var player = _serviceProvider.GetRequiredService<TTSPlayer>();
             if (player.Playing == null)
                 return;
-            
+
             AudioPlaybackEngine.Instance.RemoveMixerInput(player.Playing);
             player.Playing = null;
 
-            _logger.LogInformation("Skipped current tts.");
+            _logger.Information("Skipped current tts.");
         }
     }
 }

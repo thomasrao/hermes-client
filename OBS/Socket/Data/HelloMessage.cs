@@ -1,6 +1,5 @@
 namespace TwitchChatTTS.OBS.Socket.Data
 {
-    [Serializable]
     public class HelloMessage
     {
         public string ObsWebSocketVersion { get; set; }

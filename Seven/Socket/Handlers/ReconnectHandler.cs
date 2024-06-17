@@ -1,6 +1,6 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.Seven.Socket.Data;
 
 namespace TwitchChatTTS.Seven.Socket.Handlers
@@ -10,7 +10,8 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
         private ILogger Logger { get; }
         public int OperationCode { get; set; } = 4;
 
-        public ReconnectHandler(ILogger<ReconnectHandler> logger) {
+        public ReconnectHandler(ILogger logger)
+        {
             Logger = logger;
         }
 
@@ -19,7 +20,7 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
             if (message is not ReconnectMessage obj || obj == null)
                 return;
 
-            Logger.LogInformation($"7tv server wants us to reconnect (reason: {obj.Reason}).");
+            Logger.Information($"7tv server wants us to reconnect (reason: {obj.Reason}).");
         }
     }
 }

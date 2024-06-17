@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchLib.Client.Models;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -7,10 +7,11 @@ namespace TwitchChatTTS.Chat.Commands
     public class SkipAllCommand : ChatCommand
     {
         private IServiceProvider _serviceProvider;
-        private ILogger<SkipAllCommand> _logger;
+        private ILogger _logger;
 
-        public SkipAllCommand(IServiceProvider serviceProvider, ILogger<SkipAllCommand> logger)
-        : base("skipall", "Skips all text to speech messages in queue and playing.") {
+        public SkipAllCommand(IServiceProvider serviceProvider, ILogger logger)
+        : base("skipall", "Skips all text to speech messages in queue and playing.")
+        {
             _serviceProvider = serviceProvider;
             _logger = logger;
         }
@@ -27,11 +28,11 @@ namespace TwitchChatTTS.Chat.Commands
 
             if (player.Playing == null)
                 return;
-            
+
             AudioPlaybackEngine.Instance.RemoveMixerInput(player.Playing);
             player.Playing = null;
 
-            _logger.LogInformation("Skipped all queued and playing tts.");
+            _logger.Information("Skipped all queued and playing tts.");
         }
     }
 }

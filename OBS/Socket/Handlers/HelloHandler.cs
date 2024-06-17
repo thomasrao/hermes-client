@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.OBS.Socket.Data;
 using TwitchChatTTS.OBS.Socket.Context;
 
@@ -10,13 +10,14 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
 {
     public class HelloHandler : IWebSocketHandler
     {
-        private ILogger Logger { get; }
+        private ILogger _logger { get; }
         public int OperationCode { get; set; } = 0;
-        private HelloContext Context { get; }
+        private HelloContext _context { get; }
 
-        public HelloHandler(ILogger<HelloHandler> logger, HelloContext context) {
-            Logger = logger;
-            Context = context;
+        public HelloHandler(ILogger logger, HelloContext context)
+        {
+            _logger = logger;
+            _context = context;
         }
 
         public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
@@ -24,19 +25,23 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             if (message is not HelloMessage obj || obj == null)
                 return;
 
-            Logger.LogTrace("OBS websocket password: " + Context.Password);
-            if (obj.Authentication == null || Context.Password == null) // TODO: send re-identify message.
+            _logger.Verbose("OBS websocket password: " + _context.Password);
+            if (obj.Authentication == null || string.IsNullOrWhiteSpace(_context.Password))
+            {
+                await sender.Send(1, new IdentifyMessage(obj.RpcVersion, string.Empty, 1023 | 262144));
                 return;
-            
+            }
+
             var salt = obj.Authentication.Salt;
             var challenge = obj.Authentication.Challenge;
-            Logger.LogTrace("Salt: " + salt);
-            Logger.LogTrace("Challenge: " + challenge);
-            
-            string secret = Context.Password + salt;
+            _logger.Verbose("Salt: " + salt);
+            _logger.Verbose("Challenge: " + challenge);
+
+            string secret = _context.Password + salt;
             byte[] bytes = Encoding.UTF8.GetBytes(secret);
             string hash = null;
-            using (var sha = SHA256.Create()) {
+            using (var sha = SHA256.Create())
+            {
                 bytes = sha.ComputeHash(bytes);
                 hash = Convert.ToBase64String(bytes);
 
@@ -46,7 +51,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                 hash = Convert.ToBase64String(bytes);
             }
 
-            Logger.LogTrace("Final hash: " + hash);
+            _logger.Verbose("Final hash: " + hash);
             await sender.Send(1, new IdentifyMessage(obj.RpcVersion, hash, 1023 | 262144));
         }
     }

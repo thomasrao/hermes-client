@@ -1,6 +1,6 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.OBS.Socket.Data;
 
 namespace TwitchChatTTS.OBS.Socket.Handlers
@@ -10,7 +10,8 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
         private ILogger Logger { get; }
         public int OperationCode { get; set; } = 2;
 
-        public IdentifiedHandler(ILogger<IdentifiedHandler> logger) {
+        public IdentifiedHandler(ILogger logger)
+        {
             Logger = logger;
         }
 
@@ -18,9 +19,9 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
         {
             if (message is not IdentifiedMessage obj || obj == null)
                 return;
-            
+
             sender.Connected = true;
-            Logger.LogInformation("Connected to OBS via rpc version " + obj.NegotiatedRpcVersion + ".");
+            Logger.Information("Connected to OBS via rpc version " + obj.NegotiatedRpcVersion + ".");
         }
     }
 }

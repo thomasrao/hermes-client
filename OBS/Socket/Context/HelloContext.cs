@@ -1,6 +1,5 @@
 namespace TwitchChatTTS.OBS.Socket.Context
 {
-    [Serializable]
     public class HelloContext
     {
         public string? Host { get; set; }

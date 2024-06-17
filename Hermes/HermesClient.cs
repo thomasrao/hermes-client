@@ -1,31 +1,44 @@
 using TwitchChatTTS.Helpers;
 using TwitchChatTTS;
-using TwitchChatTTS.Hermes;
 using System.Text.Json;
+using HermesSocketLibrary.Requests.Messages;
+using TwitchChatTTS.Hermes;
 
-public class HermesClient {
+public class HermesApiClient
+{
     private WebClientWrap _web;
 
-    public HermesClient(Configuration configuration) {
-        if (string.IsNullOrWhiteSpace(configuration.Hermes?.Token)) {
+    public HermesApiClient(Configuration configuration)
+    {
+        if (string.IsNullOrWhiteSpace(configuration.Hermes?.Token))
+        {
             throw new Exception("Ensure you have written your API key in \".token\" file, in the same folder as this application.");
         }
 
-        _web = new WebClientWrap(new JsonSerializerOptions() {
+        _web = new WebClientWrap(new JsonSerializerOptions()
+        {
             PropertyNameCaseInsensitive = false,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
         });
         _web.AddHeader("x-api-key", configuration.Hermes.Token);
     }
 
-    public async Task<Account> FetchHermesAccountDetails() {
+    public async Task<TTSVersion> GetTTSVersion()
+    {
+        var version = await _web.GetJson<TTSVersion>("https://hermes.goblincaves.com/api/info/version");
+        return version;
+    }
+
+    public async Task<Account> FetchHermesAccountDetails()
+    {
         var account = await _web.GetJson<Account>("https://hermes.goblincaves.com/api/account");
         if (account == null || account.Id == null || account.Username == null)
             throw new NullReferenceException("Invalid value found while fetching for hermes account data.");
         return account;
     }
 
-    public async Task<TwitchBotToken> FetchTwitchBotToken() {
+    public async Task<TwitchBotToken> FetchTwitchBotToken()
+    {
         var token = await _web.GetJson<TwitchBotToken>("https://hermes.goblincaves.com/api/token/bot");
         if (token == null || token.ClientId == null || token.AccessToken == null || token.RefreshToken == null || token.ClientSecret == null)
             throw new Exception("Failed to fetch Twitch API token from Hermes.");
@@ -33,7 +46,8 @@ public class HermesClient {
         return token;
     }
 
-    public async Task<IEnumerable<TTSUsernameFilter>> FetchTTSUsernameFilters() {
+    public async Task<IEnumerable<TTSUsernameFilter>> FetchTTSUsernameFilters()
+    {
         var filters = await _web.GetJson<IEnumerable<TTSUsernameFilter>>("https://hermes.goblincaves.com/api/settings/tts/filter/users");
         if (filters == null)
             throw new Exception("Failed to fetch TTS username filters from Hermes.");
@@ -41,23 +55,35 @@ public class HermesClient {
         return filters;
     }
 
-    public async Task<string> FetchTTSDefaultVoice() {
-        var data = await _web.GetJson<TTSVoice>("https://hermes.goblincaves.com/api/settings/tts/default");
+    public async Task<string> FetchTTSDefaultVoice()
+    {
+        var data = await _web.GetJson<string>("https://hermes.goblincaves.com/api/settings/tts/default");
         if (data == null)
             throw new Exception("Failed to fetch TTS default voice from Hermes.");
 
-        return data.Label;
+        return data;
     }
 
-    public async Task<IEnumerable<TTSVoice>> FetchTTSEnabledVoices() {
-        var voices = await _web.GetJson<IEnumerable<TTSVoice>>("https://hermes.goblincaves.com/api/settings/tts");
+    public async Task<IEnumerable<TTSChatterSelectedVoice>> FetchTTSChatterSelectedVoices()
+    {
+        var voices = await _web.GetJson<IEnumerable<TTSChatterSelectedVoice>>("https://hermes.goblincaves.com/api/settings/tts/selected");
+        if (voices == null)
+            throw new Exception("Failed to fetch TTS chatter selected voices from Hermes.");
+
+        return voices;
+    }
+
+    public async Task<IEnumerable<string>> FetchTTSEnabledVoices()
+    {
+        var voices = await _web.GetJson<IEnumerable<string>>("https://hermes.goblincaves.com/api/settings/tts");
         if (voices == null)
             throw new Exception("Failed to fetch TTS enabled voices from Hermes.");
 
         return voices;
     }
 
-    public async Task<IEnumerable<TTSWordFilter>> FetchTTSWordFilters() {
+    public async Task<IEnumerable<TTSWordFilter>> FetchTTSWordFilters()
+    {
         var filters = await _web.GetJson<IEnumerable<TTSWordFilter>>("https://hermes.goblincaves.com/api/settings/tts/filter/words");
         if (filters == null)
             throw new Exception("Failed to fetch TTS word filters from Hermes.");

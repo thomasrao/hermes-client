@@ -1,6 +1,5 @@
 namespace TwitchChatTTS.OBS.Socket.Data
 {
-    [Serializable]
     public class RequestResponseMessage
     {
         public string RequestType { get; set; }

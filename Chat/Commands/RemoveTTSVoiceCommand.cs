@@ -2,7 +2,7 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Socket.Data;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.Chat.Commands.Parameters;
 using TwitchLib.Client.Models;
 
@@ -11,13 +11,14 @@ namespace TwitchChatTTS.Chat.Commands
     public class RemoveTTSVoiceCommand : ChatCommand
     {
         private IServiceProvider _serviceProvider;
-        private ILogger<RemoveTTSVoiceCommand> _logger;
+        private ILogger _logger;
 
         public RemoveTTSVoiceCommand(
             [FromKeyedServices("parameter-unvalidated")] ChatCommandParameter ttsVoiceParameter,
             IServiceProvider serviceProvider,
-            ILogger<RemoveTTSVoiceCommand> logger
-        ) : base("removettsvoice", "Select a TTS voice as the default for that user.") {
+            ILogger logger
+        ) : base("removettsvoice", "Select a TTS voice as the default for that user.")
+        {
             _serviceProvider = serviceProvider;
             _logger = logger;
 
@@ -26,7 +27,7 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
         {
-            return message.IsModerator || message.IsBroadcaster || message.UserId == "126224566";
+            return message.IsModerator || message.IsBroadcaster;
         }
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
@@ -42,13 +43,14 @@ namespace TwitchChatTTS.Chat.Commands
             var exists = context.VoicesAvailable.Any(v => v.Value.ToLower() == voiceName);
             if (!exists)
                 return;
-            
-            var voiceId = context.VoicesAvailable.FirstOrDefault(v => v.Value.ToLower() == voiceName).Key;    
-            await client.Send(3, new RequestMessage() {
+
+            var voiceId = context.VoicesAvailable.FirstOrDefault(v => v.Value.ToLower() == voiceName).Key;
+            await client.Send(3, new RequestMessage()
+            {
                 Type = "delete_tts_voice",
-                Data = new Dictionary<string, string>() { { "@voice", voiceId } }
+                Data = new Dictionary<string, object>() { { "voice", voiceId } }
             });
-            _logger.LogInformation($"Deleted a TTS voice by {message.Username} (id: {message.UserId}): {voiceName}.");
+            _logger.Information($"Deleted a TTS voice by {message.Username} (id: {message.UserId}): {voiceName}.");
         }
     }
 }

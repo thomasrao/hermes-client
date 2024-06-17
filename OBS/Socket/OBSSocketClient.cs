@@ -1,29 +1,34 @@
 using CommonSocketLibrary.Common;
 using CommonSocketLibrary.Abstract;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using System.Text.Json;
 
 namespace TwitchChatTTS.OBS.Socket
 {
-    public class OBSSocketClient : WebSocketClient {
+    public class OBSSocketClient : WebSocketClient
+    {
         private bool _live;
-        public bool? Live {
+        public bool? Live
+        {
             get => Connected ? _live : null;
-            set {
+            set
+            {
                 if (value.HasValue)
                     _live = value.Value;
             }
         }
 
         public OBSSocketClient(
-            ILogger<OBSSocketClient> logger,
+            ILogger logger,
             [FromKeyedServices("obs")] HandlerManager<WebSocketClient, IWebSocketHandler> handlerManager,
             [FromKeyedServices("obs")] HandlerTypeManager<WebSocketClient, IWebSocketHandler> typeManager
-        ) : base(logger, handlerManager, typeManager, new JsonSerializerOptions() {
+        ) : base(logger, handlerManager, typeManager, new JsonSerializerOptions()
+        {
             PropertyNameCaseInsensitive = false,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        }) {
+        })
+        {
             _live = false;
         }
     }

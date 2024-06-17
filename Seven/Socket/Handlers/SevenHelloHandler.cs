@@ -1,6 +1,6 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.Seven.Socket.Data;
 
 namespace TwitchChatTTS.Seven.Socket.Handlers
@@ -11,7 +11,8 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
         private Configuration Configuration { get; }
         public int OperationCode { get; set; } = 1;
 
-        public SevenHelloHandler(ILogger<SevenHelloHandler> logger, Configuration configuration) {
+        public SevenHelloHandler(ILogger logger, Configuration configuration)
+        {
             Logger = logger;
             Configuration = configuration;
         }
@@ -23,10 +24,10 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 
             if (sender is not SevenSocketClient seven || seven == null)
                 return;
-            
+
             seven.Connected = true;
             seven.ConnectionDetails = obj;
-            Logger.LogInformation("Connected to 7tv websockets.");
+            Logger.Information("Connected to 7tv websockets.");
         }
     }
 }

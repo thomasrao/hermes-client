@@ -1,6 +1,5 @@
 namespace TwitchChatTTS.OBS.Socket.Data
 {
-    [Serializable]
     public class EventMessage
     {
         public string EventType { get; set; }

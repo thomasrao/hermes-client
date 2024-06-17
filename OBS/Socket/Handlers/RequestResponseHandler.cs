@@ -1,6 +1,6 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.OBS.Socket.Data;
 
 namespace TwitchChatTTS.OBS.Socket.Handlers
@@ -10,7 +10,8 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
         private ILogger Logger { get; }
         public int OperationCode { get; set; } = 7;
 
-        public RequestResponseHandler(ILogger<RequestResponseHandler> logger) {
+        public RequestResponseHandler(ILogger logger)
+        {
             Logger = logger;
         }
 
@@ -18,15 +19,17 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
         {
             if (message is not RequestResponseMessage obj || obj == null)
                 return;
-            
-            switch (obj.RequestType) {
+
+            switch (obj.RequestType)
+            {
                 case "GetOutputStatus":
                     if (sender is not OBSSocketClient client)
                         return;
-                    
-                    if (obj.RequestId == "stream") {
+
+                    if (obj.RequestId == "stream")
+                    {
                         client.Live = obj.ResponseData["outputActive"].ToString() == "True";
-                        Logger.LogWarning("Updated stream's live status to " + client.Live);
+                        Logger.Warning("Updated stream's live status to " + client.Live);
                     }
                     break;
             }

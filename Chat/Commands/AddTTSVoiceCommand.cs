@@ -2,7 +2,7 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Socket.Data;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using TwitchChatTTS.Chat.Commands.Parameters;
 using TwitchLib.Client.Models;
 
@@ -11,13 +11,14 @@ namespace TwitchChatTTS.Chat.Commands
     public class AddTTSVoiceCommand : ChatCommand
     {
         private IServiceProvider _serviceProvider;
-        private ILogger<AddTTSVoiceCommand> _logger;
+        private ILogger _logger;
 
         public AddTTSVoiceCommand(
             [FromKeyedServices("parameter-unvalidated")] ChatCommandParameter ttsVoiceParameter,
             IServiceProvider serviceProvider,
-            ILogger<AddTTSVoiceCommand> logger
-        ) : base("addttsvoice", "Select a TTS voice as the default for that user.") {
+            ILogger logger
+        ) : base("addttsvoice", "Select a TTS voice as the default for that user.")
+        {
             _serviceProvider = serviceProvider;
             _logger = logger;
 
@@ -26,7 +27,7 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
         {
-            return message.IsModerator || message.IsBroadcaster || message.UserId == "126224566";
+            return message.IsModerator || message.IsBroadcaster;
         }
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
@@ -43,12 +44,13 @@ namespace TwitchChatTTS.Chat.Commands
             var exists = context.VoicesAvailable.Any(v => v.Value.ToLower() == voiceNameLower);
             if (exists)
                 return;
-            
-            await client.Send(3, new RequestMessage() {
+
+            await client.Send(3, new RequestMessage()
+            {
                 Type = "create_tts_voice",
-                Data = new Dictionary<string, string>() { { "@voice", voiceName } }
+                Data = new Dictionary<string, object>() { { "voice", voiceName } }
             });
-            _logger.LogInformation($"Added a new TTS voice by {message.Username} (id: {message.UserId}): {voiceName}.");
+            _logger.Information($"Added a new TTS voice by {message.Username} (id: {message.UserId}): {voiceName}.");
         }
     }
 }

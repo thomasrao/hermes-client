@@ -10,15 +10,18 @@ namespace TwitchChatTTS.Chat.Commands
         public IList<ChatCommandParameter> Parameters { get => _parameters.AsReadOnly(); }
         private IList<ChatCommandParameter> _parameters;
 
-        public ChatCommand(string name, string description) {
+        public ChatCommand(string name, string description)
+        {
             Name = name;
             Description = description;
             _parameters = new List<ChatCommandParameter>();
         }
 
-        protected void AddParameter(ChatCommandParameter parameter) {
-            if (parameter != null)
-                _parameters.Add(parameter);
+        protected void AddParameter(ChatCommandParameter parameter, bool optional = false)
+        {
+            if (parameter != null && parameter.Clone() is ChatCommandParameter p) {
+                _parameters.Add(optional ? p.Permissive() : p);
+            }
         }
 
         public abstract Task<bool> CheckPermissions(ChatMessage message, long broadcasterId);

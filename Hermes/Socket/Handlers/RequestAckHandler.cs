@@ -5,7 +5,8 @@ using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Requests.Messages;
 using HermesSocketLibrary.Socket.Data;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Serilog;
+using TwitchChatTTS.Seven;
 
 namespace TwitchChatTTS.Hermes.Socket.Handlers
 {
@@ -14,9 +15,13 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         private readonly IServiceProvider _serviceProvider;
         private readonly JsonSerializerOptions _options;
         private readonly ILogger _logger;
+
+        private readonly object _voicesAvailableLock = new object();
+
         public int OperationCode { get; set; } = 4;
 
-        public RequestAckHandler(IServiceProvider serviceProvider, JsonSerializerOptions options, ILogger<RequestAckHandler> logger) {
+        public RequestAckHandler(IServiceProvider serviceProvider, JsonSerializerOptions options, ILogger logger)
+        {
             _serviceProvider = serviceProvider;
             _options = options;
             _logger = logger;
@@ -32,74 +37,144 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             if (context == null)
                 return;
 
-            if (obj.Request.Type == "get_tts_voices") {
-                _logger.LogDebug("Updating all available voices.");
+            if (obj.Request.Type == "get_tts_voices")
+            {
+                _logger.Verbose("Updating all available voices for TTS.");
                 var voices = JsonSerializer.Deserialize<IEnumerable<VoiceDetails>>(obj.Data.ToString(), _options);
                 if (voices == null)
                     return;
-                
-                context.VoicesAvailable = voices.ToDictionary(e => e.Id, e => e.Name);
-                _logger.LogInformation("Updated all available voices.");
-            } else if (obj.Request.Type == "create_tts_user") {
-                _logger.LogDebug("Creating new tts voice.");
-                if (!long.TryParse(obj.Request.Data["@user"], out long userId))
+
+                lock (_voicesAvailableLock)
+                {
+                    context.VoicesAvailable = voices.ToDictionary(e => e.Id, e => e.Name);
+                }
+                _logger.Information("Updated all available voices for TTS.");
+            }
+            else if (obj.Request.Type == "create_tts_user")
+            {
+                _logger.Verbose("Adding new tts voice for user.");
+                if (!long.TryParse(obj.Request.Data["user"].ToString(), out long chatterId))
                     return;
-                string broadcasterId = obj.Request.Data["@broadcaster"].ToString();
-                // TODO: validate  broadcaster id.
-                string voice = obj.Request.Data["@voice"].ToString();
-                
-                context.VoicesSelected.Add(userId, voice);
-                _logger.LogInformation("Created new tts user.");
-            } else if (obj.Request.Type == "update_tts_user") {
-                _logger.LogDebug("Updating user's voice");
-                if (!long.TryParse(obj.Request.Data["@user"], out long userId))
+                string userId = obj.Request.Data["user"].ToString();
+                string voice = obj.Request.Data["voice"].ToString();
+
+                context.VoicesSelected.Add(chatterId, voice);
+                _logger.Information($"Added new TTS voice [voice: {voice}] for user [user id: {userId}]");
+            }
+            else if (obj.Request.Type == "update_tts_user")
+            {
+                _logger.Verbose("Updating user's voice");
+                if (!long.TryParse(obj.Request.Data["chatter"].ToString(), out long chatterId))
                     return;
-                string broadcasterId = obj.Request.Data["@broadcaster"].ToString();
-                string voice = obj.Request.Data["@voice"].ToString();
-                
-                context.VoicesSelected[userId] = voice;
-                _logger.LogInformation($"Updated user's voice to {voice}.");
-            } else if (obj.Request.Type == "create_tts_voice") {
-                _logger.LogDebug("Creating new tts voice.");
-                string? voice = obj.Request.Data["@voice"];
+                string userId = obj.Request.Data["user"].ToString();
+                string voice = obj.Request.Data["voice"].ToString();
+
+                context.VoicesSelected[chatterId] = voice;
+                _logger.Information($"Updated TTS voice [voice: {voice}] for user [user id: {userId}]");
+            }
+            else if (obj.Request.Type == "create_tts_voice")
+            {
+                _logger.Verbose("Creating new tts voice.");
+                string? voice = obj.Request.Data["voice"].ToString();
                 string? voiceId = obj.Data.ToString();
                 if (voice == null || voiceId == null)
                     return;
 
-                context.VoicesAvailable.Add(voiceId, voice);
-                _logger.LogInformation($"Created new tts voice named {voice} (id: {voiceId}).");
-            } else if (obj.Request.Type == "delete_tts_voice") {
-                _logger.LogDebug("Deleting tts voice.");
+                lock (_voicesAvailableLock)
+                {
+                    var list = context.VoicesAvailable.ToDictionary(k => k.Key, v => v.Value);
+                    list.Add(voiceId, voice);
+                    context.VoicesAvailable = list;
+                }
+                _logger.Information($"Created new tts voice [voice: {voice}][id: {voiceId}].");
+            }
+            else if (obj.Request.Type == "delete_tts_voice")
+            {
+                _logger.Verbose("Deleting tts voice.");
+                var voice = obj.Request.Data["voice"].ToString();
+                if (!context.VoicesAvailable.TryGetValue(voice, out string voiceName) || voiceName == null)
+                    return;
 
-                var voice = obj.Request.Data["@voice"];
-                if (!context.VoicesAvailable.TryGetValue(voice, out string voiceName) || voiceName == null) {
-                    return;
+                lock (_voicesAvailableLock)
+                {
+                    var dict = context.VoicesAvailable.ToDictionary(k => k.Key, v => v.Value);
+                    dict.Remove(voice);
+                    context.VoicesAvailable.Remove(voice);
                 }
-                
-                context.VoicesAvailable.Remove(voice);
-                _logger.LogInformation("Deleted a voice, named " + voiceName + ".");
-            } else if (obj.Request.Type == "update_tts_voice") {
-                _logger.LogDebug("Updating tts voice.");
-                string voiceId = obj.Request.Data["@idd"].ToString();
-                string voice = obj.Request.Data["@voice"].ToString();
-                
-                if (!context.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null) {
+                _logger.Information($"Deleted a voice [voice: {voiceName}]");
+            }
+            else if (obj.Request.Type == "update_tts_voice")
+            {
+                _logger.Verbose("Updating TTS voice.");
+                string voiceId = obj.Request.Data["idd"].ToString();
+                string voice = obj.Request.Data["voice"].ToString();
+
+                if (!context.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
                     return;
-                }
-                
+
                 context.VoicesAvailable[voiceId] = voice;
-                _logger.LogInformation("Update tts voice: " + voice);
-            } else if (obj.Request.Type == "get_tts_users") {
-                _logger.LogDebug("Attempting to update all chatters' selected voice.");
+                _logger.Information($"Updated TTS voice [voice: {voice}][id: {voiceId}]");
+            }
+            else if (obj.Request.Type == "get_tts_users")
+            {
+                _logger.Verbose("Updating all chatters' selected voice.");
                 var users = JsonSerializer.Deserialize<IDictionary<long, string>>(obj.Data.ToString(), _options);
                 if (users == null)
                     return;
-                
+
                 var temp = new ConcurrentDictionary<long, string>();
                 foreach (var entry in users)
                     temp.TryAdd(entry.Key, entry.Value);
                 context.VoicesSelected = temp;
-                _logger.LogInformation($"Fetched {temp.Count()} chatters' selected voice.");
+                _logger.Information($"Updated {temp.Count()} chatters' selected voice.");
+            }
+            else if (obj.Request.Type == "get_chatter_ids")
+            {
+                _logger.Verbose("Fetching all chatters' id.");
+                var chatters = JsonSerializer.Deserialize<IEnumerable<long>>(obj.Data.ToString(), _options);
+                if (chatters == null)
+                    return;
+
+                var client = _serviceProvider.GetRequiredService<ChatMessageHandler>();
+                client.Chatters = [.. chatters];
+                _logger.Information($"Fetched {chatters.Count()} chatters' id.");
+            }
+            else if (obj.Request.Type == "get_emotes")
+            {
+                _logger.Verbose("Updating emotes.");
+                var emotes = JsonSerializer.Deserialize<IEnumerable<EmoteInfo>>(obj.Data.ToString(), _options);
+                if (emotes == null)
+                    return;
+
+                var emoteDb = _serviceProvider.GetRequiredService<EmoteDatabase>();
+                var count = 0;
+                foreach (var emote in emotes)
+                {
+                    if (emoteDb.Get(emote.Name) == null)
+                    {
+                        emoteDb.Add(emote.Name, emote.Id);
+                        count++;
+                    }
+                }
+                _logger.Information($"Fetched {count} emotes from various sources.");
+            }
+            else if (obj.Request.Type == "update_tts_voice_state")
+            {
+                _logger.Verbose("Updating TTS voice states.");
+                string voiceId = obj.Request.Data["voice"].ToString();
+                bool state = obj.Request.Data["state"].ToString() == "true";
+
+                if (!context.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
+                {
+                    _logger.Warning($"Failed to find voice [id: {voiceId}]");
+                    return;
+                }
+
+                if (state)
+                    context.VoicesEnabled.Add(voiceId);
+                else
+                    context.VoicesEnabled.Remove(voiceId);
+                _logger.Information($"Updated voice state [voice: {voiceName}][new state: {(state ? "enabled" : "disabled")}]");
             }
         }
     }

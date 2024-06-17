@@ -1,6 +1,7 @@
 using NAudio.Wave;
 
-public class TTSPlayer {
+public class TTSPlayer
+{
     private PriorityQueue<TTSMessage, int> _messages; // ready to play
     private PriorityQueue<TTSMessage, int> _buffer;
     private Mutex _mutex;
@@ -8,77 +9,105 @@ public class TTSPlayer {
 
     public ISampleProvider? Playing { get; set; }
 
-    public TTSPlayer() {
+    public TTSPlayer()
+    {
         _messages = new PriorityQueue<TTSMessage, int>();
         _buffer = new PriorityQueue<TTSMessage, int>();
         _mutex = new Mutex();
         _mutex2 = new Mutex();
     }
 
-    public void Add(TTSMessage message) {
-        try {
+    public void Add(TTSMessage message)
+    {
+        try
+        {
             _mutex2.WaitOne();
             _buffer.Enqueue(message, message.Priority);
-        } finally {
+        }
+        finally
+        {
             _mutex2.ReleaseMutex();
         }
     }
 
-    public TTSMessage? ReceiveReady() {
-        try {
+    public TTSMessage? ReceiveReady()
+    {
+        try
+        {
             _mutex.WaitOne();
-            if (_messages.TryDequeue(out TTSMessage? message, out int _)) {
+            if (_messages.TryDequeue(out TTSMessage? message, out int _))
+            {
                 return message;
             }
             return null;
-        } finally {
+        }
+        finally
+        {
             _mutex.ReleaseMutex();
         }
     }
 
-    public TTSMessage? ReceiveBuffer() {
-        try {
+    public TTSMessage? ReceiveBuffer()
+    {
+        try
+        {
             _mutex2.WaitOne();
-            if (_buffer.TryDequeue(out TTSMessage? message, out int _)) {
+            if (_buffer.TryDequeue(out TTSMessage? message, out int _))
+            {
                 return message;
             }
             return null;
-        } finally {
+        }
+        finally
+        {
             _mutex2.ReleaseMutex();
         }
     }
 
-    public void Ready(TTSMessage message) {
-        try {
+    public void Ready(TTSMessage message)
+    {
+        try
+        {
             _mutex.WaitOne();
             _messages.Enqueue(message, message.Priority);
-        } finally {
+        }
+        finally
+        {
             _mutex.ReleaseMutex();
         }
     }
 
-    public void RemoveAll() {
-        try {
+    public void RemoveAll()
+    {
+        try
+        {
             _mutex2.WaitOne();
             _buffer.Clear();
-        } finally {
+        }
+        finally
+        {
             _mutex2.ReleaseMutex();
         }
 
-        try {
+        try
+        {
             _mutex.WaitOne();
             _messages.Clear();
-        } finally {
+        }
+        finally
+        {
             _mutex.ReleaseMutex();
         }
     }
 
-    public bool IsEmpty() {
+    public bool IsEmpty()
+    {
         return _messages.Count == 0;
     }
 }
 
-public class TTSMessage {
+public class TTSMessage
+{
     public string? Voice { get; set; }
     public string? Channel { get; set; }
     public string? Username { get; set; }
