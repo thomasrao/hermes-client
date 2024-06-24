@@ -28,13 +28,13 @@ namespace TwitchChatTTS.Seven.Socket.Managers
                         continue;
                     }
 
-                    Logger.Debug($"Linked type {type.AssemblyQualifiedName} to 7tv websocket handler {handler.GetType().AssemblyQualifiedName}.");
+                    _logger.Debug($"Linked type {type.AssemblyQualifiedName} to 7tv websocket handler {handler.GetType().AssemblyQualifiedName}.");
                     Add(handler);
                 }
             }
             catch (Exception e)
             {
-                Logger.Error(e, "Failed to load 7tv websocket handler types.");
+                _logger.Error(e, "Failed to load 7tv websocket handler types.");
             }
         }
     }

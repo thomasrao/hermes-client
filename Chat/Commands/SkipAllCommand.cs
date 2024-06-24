@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchLib.Client.Models;
 
@@ -6,13 +5,13 @@ namespace TwitchChatTTS.Chat.Commands
 {
     public class SkipAllCommand : ChatCommand
     {
-        private IServiceProvider _serviceProvider;
-        private ILogger _logger;
+        private readonly TTSPlayer _ttsPlayer;
+        private readonly ILogger _logger;
 
-        public SkipAllCommand(IServiceProvider serviceProvider, ILogger logger)
+        public SkipAllCommand(TTSPlayer ttsPlayer, ILogger logger)
         : base("skipall", "Skips all text to speech messages in queue and playing.")
         {
-            _serviceProvider = serviceProvider;
+            _ttsPlayer = ttsPlayer;
             _logger = logger;
         }
 
@@ -23,14 +22,13 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
         {
-            var player = _serviceProvider.GetRequiredService<TTSPlayer>();
-            player.RemoveAll();
+            _ttsPlayer.RemoveAll();
 
-            if (player.Playing == null)
+            if (_ttsPlayer.Playing == null)
                 return;
 
-            AudioPlaybackEngine.Instance.RemoveMixerInput(player.Playing);
-            player.Playing = null;
+            AudioPlaybackEngine.Instance.RemoveMixerInput(_ttsPlayer.Playing);
+            _ttsPlayer.Playing = null;
 
             _logger.Information("Skipped all queued and playing tts.");
         }

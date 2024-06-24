@@ -3,10 +3,11 @@ using TwitchChatTTS;
 using System.Text.Json;
 using HermesSocketLibrary.Requests.Messages;
 using TwitchChatTTS.Hermes;
+using TwitchChatTTS.Twitch.Redemptions;
 
 public class HermesApiClient
 {
-    private WebClientWrap _web;
+    private readonly WebClientWrap _web;
 
     public HermesApiClient(Configuration configuration)
     {
@@ -89,5 +90,27 @@ public class HermesApiClient
             throw new Exception("Failed to fetch TTS word filters from Hermes.");
 
         return filters;
+    }
+
+    public async Task<IEnumerable<Redemption>> FetchRedemptions()
+    {
+        var redemptions = await _web.GetJson<IEnumerable<Redemption>>("https://hermes.goblincaves.com/api/settings/redemptions", new JsonSerializerOptions()
+        {
+            PropertyNameCaseInsensitive = false,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+        if (redemptions == null)
+            throw new Exception("Failed to redemptions from Hermes.");
+
+        return redemptions;
+    }
+
+    public async Task<IEnumerable<RedeemableAction>> FetchRedeemableActions()
+    {
+        var actions = await _web.GetJson<IEnumerable<RedeemableAction>>("https://hermes.goblincaves.com/api/settings/redemptions/actions");
+        if (actions == null)
+            throw new Exception("Failed to fetch redeemable actions from Hermes.");
+
+        return actions;
     }
 }

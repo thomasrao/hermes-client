@@ -28,13 +28,11 @@ public class AudioPlaybackEngine : IDisposable
             throw new NullReferenceException(nameof(input));
 
         if (input.WaveFormat.Channels == mixer.WaveFormat.Channels)
-        {
             return input;
-        }
         if (input.WaveFormat.Channels == 1 && mixer.WaveFormat.Channels == 2)
-        {
             return new MonoToStereoSampleProvider(input);
-        }
+        if (input.WaveFormat.Channels == 2 && mixer.WaveFormat.Channels == 1)
+            return new StereoToMonoSampleProvider(input);
         throw new NotImplementedException("Not yet implemented this channel count conversion");
     }
 

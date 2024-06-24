@@ -2,10 +2,10 @@ using NAudio.Wave;
 
 public class TTSPlayer
 {
-    private PriorityQueue<TTSMessage, int> _messages; // ready to play
-    private PriorityQueue<TTSMessage, int> _buffer;
-    private Mutex _mutex;
-    private Mutex _mutex2;
+    private readonly PriorityQueue<TTSMessage, int> _messages; // ready to play
+    private readonly PriorityQueue<TTSMessage, int> _buffer;
+    private readonly Mutex _mutex;
+    private readonly Mutex _mutex2;
 
     public ISampleProvider? Playing { get; set; }
 

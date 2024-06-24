@@ -26,7 +26,7 @@ namespace TwitchChatTTS.OBS.Socket.Manager
                     continue;
                 }
 
-                Logger.Debug($"Linked type {type.AssemblyQualifiedName} to obs websocket handler {handler.GetType().AssemblyQualifiedName}.");
+                _logger.Debug($"Linked type {type.AssemblyQualifiedName} to obs websocket handler {handler.GetType().AssemblyQualifiedName}.");
                 Add(handler);
             }
         }

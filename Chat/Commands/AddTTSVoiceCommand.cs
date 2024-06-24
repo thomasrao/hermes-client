@@ -10,16 +10,19 @@ namespace TwitchChatTTS.Chat.Commands
 {
     public class AddTTSVoiceCommand : ChatCommand
     {
-        private IServiceProvider _serviceProvider;
-        private ILogger _logger;
+        private readonly User _user;
+        private readonly SocketClient<WebSocketMessage> _hermesClient;
+        private readonly ILogger _logger;
 
         public AddTTSVoiceCommand(
+            User user,
             [FromKeyedServices("parameter-unvalidated")] ChatCommandParameter ttsVoiceParameter,
-            IServiceProvider serviceProvider,
+            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermesClient,
             ILogger logger
         ) : base("addttsvoice", "Select a TTS voice as the default for that user.")
         {
-            _serviceProvider = serviceProvider;
+            _user = user;
+            _hermesClient = hermesClient;
             _logger = logger;
 
             AddParameter(ttsVoiceParameter);
@@ -32,25 +35,24 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
         {
-            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("hermes");
-            if (client == null)
+            //var HermesClient = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("hermes");
+            if (_hermesClient == null)
                 return;
-            var context = _serviceProvider.GetRequiredService<User>();
-            if (context == null || context.VoicesAvailable == null)
+            if (_user == null || _user.VoicesAvailable == null)
                 return;
 
             var voiceName = args.First();
             var voiceNameLower = voiceName.ToLower();
-            var exists = context.VoicesAvailable.Any(v => v.Value.ToLower() == voiceNameLower);
+            var exists = _user.VoicesAvailable.Any(v => v.Value.ToLower() == voiceNameLower);
             if (exists)
                 return;
 
-            await client.Send(3, new RequestMessage()
+            await _hermesClient.Send(3, new RequestMessage()
             {
                 Type = "create_tts_voice",
                 Data = new Dictionary<string, object>() { { "voice", voiceName } }
             });
-            _logger.Information($"Added a new TTS voice by {message.Username} (id: {message.UserId}): {voiceName}.");
+            _logger.Information($"Added a new TTS voice by {message.Username} [voice: {voiceName}][id: {message.UserId}]");
         }
     }
 }

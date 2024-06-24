@@ -1,7 +1,6 @@
 using System.Text.Json;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
-using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Seven.Socket.Data;
 
@@ -9,26 +8,26 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 {
     public class DispatchHandler : IWebSocketHandler
     {
-        private ILogger Logger { get; }
-        private EmoteDatabase Emotes { get; }
-        private object _lock = new object();
-        public int OperationCode { get; set; } = 0;
+        private readonly ILogger _logger;
+        private readonly EmoteDatabase _emotes;
+        private readonly object _lock = new object();
+        public int OperationCode { get; } = 0;
 
         public DispatchHandler(ILogger logger, EmoteDatabase emotes)
         {
-            Logger = logger;
-            Emotes = emotes;
+            _logger = logger;
+            _emotes = emotes;
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
+        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
-            if (message is not DispatchMessage obj || obj == null)
+            if (data is not DispatchMessage message || message == null)
                 return;
 
-            ApplyChanges(obj?.Body?.Pulled, cf => cf.OldValue, true);
-            ApplyChanges(obj?.Body?.Pushed, cf => cf.Value, false);
-            ApplyChanges(obj?.Body?.Removed, cf => cf.OldValue, true);
-            ApplyChanges(obj?.Body?.Updated, cf => cf.OldValue, false, cf => cf.Value);
+            ApplyChanges(message?.Body?.Pulled, cf => cf.OldValue, true);
+            ApplyChanges(message?.Body?.Pushed, cf => cf.Value, false);
+            ApplyChanges(message?.Body?.Removed, cf => cf.OldValue, true);
+            ApplyChanges(message?.Body?.Updated, cf => cf.OldValue, false, cf => cf.Value);
         }
 
         private void ApplyChanges(IEnumerable<ChangeField>? fields, Func<ChangeField, object> getter, bool removing, Func<ChangeField, object>? updater = null)
@@ -55,7 +54,7 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                     if (removing)
                     {
                         RemoveEmoteById(o.Id);
-                        Logger.Information($"Removed 7tv emote: {o.Name} (id: {o.Id})");
+                        _logger.Information($"Removed 7tv emote [name: {o.Name}][id: {o.Id}]");
                     }
                     else if (updater != null)
                     {
@@ -70,18 +69,18 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 
                         if (u != null)
                         {
-                            Emotes.Add(u.Name, u.Id);
-                            Logger.Information($"Updated 7tv emote: from '{o.Name}' to '{u.Name}' (id: {u.Id})");
+                            _emotes.Add(u.Name, u.Id);
+                            _logger.Information($"Updated 7tv emote [old name: {o.Name}][new name: {u.Name}][id: {u.Id}]");
                         }
                         else
                         {
-                            Logger.Warning("Failed to update 7tv emote.");
+                            _logger.Warning("Failed to update 7tv emote.");
                         }
                     }
                     else
                     {
-                        Emotes.Add(o.Name, o.Id);
-                        Logger.Information($"Added 7tv emote: {o.Name} (id: {o.Id})");
+                        _emotes.Add(o.Name, o.Id);
+                        _logger.Information($"Added 7tv emote [name: {o.Name}][id: {o.Id}]");
                     }
                 }
             }
@@ -90,7 +89,7 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
         private void RemoveEmoteById(string id)
         {
             string? key = null;
-            foreach (var e in Emotes.Emotes)
+            foreach (var e in _emotes.Emotes)
             {
                 if (e.Value == id)
                 {
@@ -99,7 +98,7 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                 }
             }
             if (key != null)
-                Emotes.Remove(key);
+                _emotes.Remove(key);
         }
     }
 }

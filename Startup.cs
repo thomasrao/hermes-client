@@ -27,6 +27,8 @@ using TwitchChatTTS.Chat.Commands;
 using System.Text.Json;
 using Serilog;
 using Serilog.Events;
+using Serilog.Sinks.SystemConsole.Themes;
+using TwitchChatTTS.Twitch.Redemptions;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -36,30 +38,23 @@ HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 var s = builder.Services;
 
 var deserializer = new DeserializerBuilder()
+    .IgnoreUnmatchedProperties()
     .WithNamingConvention(HyphenatedNamingConvention.Instance)
     .Build();
 
 var configContent = File.ReadAllText("tts.config.yml");
 var configuration = deserializer.Deserialize<Configuration>(configContent);
-var redeemKeys = configuration.Twitch?.Redeems?.Keys;
-if (redeemKeys != null && redeemKeys.Any())
-{
-    foreach (var key in redeemKeys)
-    {
-        if (key != key.ToLower())
-            configuration.Twitch.Redeems.Add(key.ToLower(), configuration.Twitch.Redeems[key]);
-    }
-}
 s.AddSingleton<Configuration>(configuration);
 
 var logger = new LoggerConfiguration()
-    #if DEBUG
-    .MinimumLevel.Debug()
-    #else
-    .MinimumLevel.Information()
-    #endif
-    .WriteTo.File("logs/log.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 7)
-    .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
+    .MinimumLevel.Verbose()
+    //.MinimumLevel.Override("TwitchLib.Communication.Clients.WebSocketClient", LogEventLevel.Warning)
+    //.MinimumLevel.Override("TwitchLib.PubSub.TwitchPubSub", LogEventLevel.Warning)
+    .MinimumLevel.Override("TwitchLib", LogEventLevel.Warning)
+    .MinimumLevel.Override("mariuszgromada", LogEventLevel.Error)
+    .Enrich.FromLogContext()
+    .WriteTo.File("logs/log-.log", restrictedToMinimumLevel: LogEventLevel.Debug, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 7)
+    .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information, theme: SystemConsoleTheme.Colored)
     .CreateLogger();
 
 s.AddSerilog(logger);
@@ -87,6 +82,7 @@ s.AddSingleton<ChatCommandManager>();
 
 s.AddSingleton<TTSPlayer>();
 s.AddSingleton<ChatMessageHandler>();
+s.AddSingleton<RedemptionManager>();
 s.AddSingleton<HermesApiClient>();
 s.AddSingleton<TwitchBotAuth>(new TwitchBotAuth());
 s.AddTransient<IClient, TwitchLib.Communication.Clients.WebSocketClient>();
@@ -106,7 +102,7 @@ s.AddSingleton<HelloContext>(sp =>
         Password = string.IsNullOrWhiteSpace(configuration.Obs?.Password) ? null : configuration.Obs.Password.Trim()
     }
 );
-s.AddSingleton<OBSRequestBatchManager>();
+s.AddSingleton<OBSManager>();
 s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("obs-hello");
 s.AddKeyedSingleton<IWebSocketHandler, IdentifiedHandler>("obs-identified");
 s.AddKeyedSingleton<IWebSocketHandler, RequestResponseHandler>("obs-requestresponse");

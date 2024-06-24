@@ -11,18 +11,17 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
 {
     public class RequestBatchResponseHandler : IWebSocketHandler
     {
-        private OBSRequestBatchManager _manager { get; }
-        private IServiceProvider _serviceProvider { get; }
-        private ILogger _logger { get; }
-        private JsonSerializerOptions _options;
-        public int OperationCode { get; set; } = 9;
+        private readonly IWebSocketHandler _requestResponseHandler;
+        private readonly ILogger _logger;
+        public int OperationCode { get; } = 9;
 
-        public RequestBatchResponseHandler(OBSRequestBatchManager manager, JsonSerializerOptions options, IServiceProvider serviceProvider, ILogger logger)
+        public RequestBatchResponseHandler(
+            [FromKeyedServices("obs-requestresponse")] IWebSocketHandler requestResponseHandler,
+            ILogger logger
+        )
         {
-            _manager = manager;
-            _serviceProvider = serviceProvider;
+            _requestResponseHandler = requestResponseHandler;
             _logger = logger;
-            _options = options;
         }
 
         public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
@@ -32,54 +31,37 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
 
             using (LogContext.PushProperty("obsrid", message.RequestId))
             {
-            
+
                 var results = message.Results.ToList();
                 _logger.Debug($"Received request batch response of {results.Count} messages.");
 
-                var requestData = _manager.Take(message.RequestId);
-                if (requestData == null || !results.Any())
-                {
-                    _logger.Verbose($"Received request batch response of {results.Count} messages.");
-                    return;
-                }
-
-                IList<Task> tasks = new List<Task>();
-                int count = Math.Min(results.Count, requestData.RequestTypes.Count);
+                int count = results.Count;
                 for (int i = 0; i < count; i++)
                 {
-                    Type type = requestData.RequestTypes[i];
-                    
-                    using (LogContext.PushProperty("type", type.Name))
+                    if (results[i] == null)
+                        continue;
+
+                    try
                     {
-                        try
+                        _logger.Debug($"Request response from OBS request batch #{i + 1}/{count}: {results[i]}");
+                        var response = JsonSerializer.Deserialize<RequestResponseMessage>(results[i].ToString(), new JsonSerializerOptions()
                         {
-                            var handler = GetResponseHandlerForRequestType(type);
-                            _logger.Verbose($"Request handled by {handler.GetType().Name}.");
-                            tasks.Add(handler.Execute(sender, results[i]));
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Error(ex, "Failed to process an item in a request batch message.");
-                        }
+                            PropertyNameCaseInsensitive = false,
+                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                        });
+                        if (response == null)
+                            continue;
+
+                        await _requestResponseHandler.Execute(sender, response);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "Failed to process an item in a request batch message.");
                     }
                 }
 
-                _logger.Verbose($"Waiting for processing to complete.");
-                await Task.WhenAll(tasks);
-
                 _logger.Debug($"Finished processing all request in this batch.");
             }
-        }
-
-        private IWebSocketHandler? GetResponseHandlerForRequestType(Type type)
-        {
-            if (type == typeof(RequestMessage))
-                return _serviceProvider.GetRequiredKeyedService<IWebSocketHandler>("obs-requestresponse");
-            else if (type == typeof(RequestBatchMessage))
-                return _serviceProvider.GetRequiredKeyedService<IWebSocketHandler>("obs-requestbatcresponse");
-            else if (type == typeof(IdentifyMessage))
-                return _serviceProvider.GetRequiredKeyedService<IWebSocketHandler>("obs-identified");
-            return null;
         }
     }
 }

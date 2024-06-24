@@ -7,31 +7,29 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
 {
     public class EventMessageHandler : IWebSocketHandler
     {
-        private ILogger _logger { get; }
-        private IServiceProvider _serviceProvider { get; }
-        public int OperationCode { get; set; } = 5;
+        private readonly ILogger _logger;
+        public int OperationCode { get; } = 5;
 
-        public EventMessageHandler(ILogger logger, IServiceProvider serviceProvider)
+        public EventMessageHandler(ILogger logger)
         {
             _logger = logger;
-            _serviceProvider = serviceProvider;
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
+        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
-            if (message is not EventMessage obj || obj == null)
+            if (data is not EventMessage message || message == null)
                 return;
 
-            switch (obj.EventType)
+            switch (message.EventType)
             {
                 case "StreamStateChanged":
                 case "RecordStateChanged":
                     if (sender is not OBSSocketClient client)
                         return;
 
-                    string? raw_state = obj.EventData["outputState"].ToString();
+                    string? raw_state = message.EventData["outputState"].ToString();
                     string? state = raw_state?.Substring(21).ToLower();
-                    client.Live = obj.EventData["outputActive"].ToString() == "True";
+                    client.Live = message.EventData["outputActive"].ToString() == "True";
                     _logger.Warning("Stream " + (state != null && state.EndsWith("ing") ? "is " : "has ") + state + ".");
 
                     if (client.Live == false && state != null && !state.EndsWith("ing"))
@@ -40,7 +38,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                     }
                     break;
                 default:
-                    _logger.Debug(obj.EventType + " EVENT: " + string.Join(" | ", obj.EventData?.Select(x => x.Key + "=" + x.Value?.ToString()) ?? new string[0]));
+                    _logger.Debug(message.EventType + " EVENT: " + string.Join(" | ", message.EventData?.Select(x => x.Key + "=" + x.Value?.ToString()) ?? new string[0]));
                     break;
             }
         }

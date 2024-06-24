@@ -5,8 +5,8 @@ namespace TwitchChatTTS.Helpers
 {
     public class WebClientWrap
     {
-        private HttpClient _client;
-        private JsonSerializerOptions _options;
+        private readonly HttpClient _client;
+        private readonly JsonSerializerOptions _options;
 
 
         public WebClientWrap(JsonSerializerOptions options)
@@ -23,10 +23,10 @@ namespace TwitchChatTTS.Helpers
             _client.DefaultRequestHeaders.Add(key, value);
         }
 
-        public async Task<T?> GetJson<T>(string uri)
+        public async Task<T?> GetJson<T>(string uri, JsonSerializerOptions options = null)
         {
             var response = await _client.GetAsync(uri);
-            return JsonSerializer.Deserialize<T>(await response.Content.ReadAsStreamAsync(), _options);
+            return JsonSerializer.Deserialize<T>(await response.Content.ReadAsStreamAsync(), options ?? _options);
         }
 
         public async Task<HttpResponseMessage> Get(string uri)

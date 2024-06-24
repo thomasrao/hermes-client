@@ -14,14 +14,14 @@ using HermesSocketLibrary.Socket.Data;
 
 public class ChatMessageHandler
 {
-    private ILogger _logger { get; }
-    private Configuration _configuration { get; }
-    private EmoteDatabase _emotes { get; }
-    private TTSPlayer _player { get; }
-    private ChatCommandManager _commands { get; }
-    private OBSSocketClient? _obsClient { get; }
-    private HermesSocketClient? _hermesClient { get; }
-    private IServiceProvider _serviceProvider { get; }
+    private readonly User _user;
+    private readonly Configuration _configuration;
+    private readonly EmoteDatabase _emotes;
+    private readonly TTSPlayer _player;
+    private readonly ChatCommandManager _commands;
+    private readonly OBSSocketClient? _obsClient;
+    private readonly HermesSocketClient? _hermesClient;
+    private readonly ILogger _logger;
 
     private Regex sfxRegex;
     private HashSet<long> _chatters;
@@ -30,23 +30,23 @@ public class ChatMessageHandler
 
 
     public ChatMessageHandler(
+        User user,
         TTSPlayer player,
         ChatCommandManager commands,
         EmoteDatabase emotes,
         [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obsClient,
         [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermesClient,
         Configuration configuration,
-        IServiceProvider serviceProvider,
         ILogger logger
     )
     {
+        _user = user;
         _player = player;
         _commands = commands;
         _emotes = emotes;
         _obsClient = obsClient as OBSSocketClient;
         _hermesClient = hermesClient as HermesSocketClient;
         _configuration = configuration;
-        _serviceProvider = serviceProvider;
         _logger = logger;
 
         _chatters = null;
@@ -61,13 +61,12 @@ public class ChatMessageHandler
         if (_configuration.Twitch?.TtsWhenOffline != true && _obsClient.Live == false)
             return new MessageResult(MessageStatus.NotReady, -1, -1);
 
-        var user = _serviceProvider.GetRequiredService<User>();
         var m = e.ChatMessage;
         var msg = e.ChatMessage.Message;
         var chatterId = long.Parse(m.UserId);
         var tasks = new List<Task>();
 
-        var blocked = user.ChatterFilters.TryGetValue(m.Username, out TTSUsernameFilter? filter) && filter.Tag == "blacklisted";
+        var blocked = _user.ChatterFilters.TryGetValue(m.Username, out TTSUsernameFilter? filter) && filter.Tag == "blacklisted";
         if (!blocked || m.IsBroadcaster)
         {
             try
@@ -78,7 +77,7 @@ public class ChatMessageHandler
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed at executing command.");
+                _logger.Error(ex, $"Failed executing a chat command [message: {msg}][chatter: {m.Username}][cid: {m.UserId}][mid: {m.Id}]");
             }
         }
 
@@ -108,13 +107,9 @@ public class ChatMessageHandler
         foreach (var w in words)
         {
             if (wordCounter.ContainsKey(w))
-            {
                 wordCounter[w]++;
-            }
             else
-            {
                 wordCounter.Add(w, 1);
-            }
 
             var emoteId = _emotes.Get(w);
             if (emoteId == null)
@@ -143,9 +138,9 @@ public class ChatMessageHandler
         msg = filteredMsg;
 
         // Replace filtered words.
-        if (user.RegexFilters != null)
+        if (_user.RegexFilters != null)
         {
-            foreach (var wf in user.RegexFilters)
+            foreach (var wf in _user.RegexFilters)
             {
                 if (wf.Search == null || wf.Replace == null)
                     continue;
@@ -171,48 +166,36 @@ public class ChatMessageHandler
         // Determine the priority of this message
         int priority = 0;
         if (m.IsStaff)
-        {
             priority = int.MinValue;
-        }
         else if (filter?.Tag == "priority")
-        {
             priority = int.MinValue + 1;
-        }
         else if (m.IsModerator)
-        {
             priority = -100;
-        }
         else if (m.IsVip)
-        {
             priority = -10;
-        }
         else if (m.IsPartner)
-        {
             priority = -5;
-        }
         else if (m.IsHighlighted)
-        {
             priority = -1;
-        }
         priority = Math.Min(priority, -m.SubscribedMonthCount * (m.IsSubscriber ? 2 : 1));
 
         // Determine voice selected.
-        string voiceSelected = user.DefaultTTSVoice;
-        if (long.TryParse(e.ChatMessage.UserId, out long userId) && user.VoicesSelected?.ContainsKey(userId) == true)
+        string voiceSelected = _user.DefaultTTSVoice;
+        if (long.TryParse(e.ChatMessage.UserId, out long userId) && _user.VoicesSelected?.ContainsKey(userId) == true)
         {
-            var voiceId = user.VoicesSelected[userId];
-            if (user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) && voiceName != null)
+            var voiceId = _user.VoicesSelected[userId];
+            if (_user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) && voiceName != null)
             {
                 voiceSelected = voiceName;
             }
         }
 
         // Determine additional voices used
-        var matches = user.WordFilterRegex?.Matches(msg).ToArray();
+        var matches = _user.WordFilterRegex?.Matches(msg).ToArray();
         if (matches == null || matches.FirstOrDefault() == null || matches.First().Index < 0)
         {
             HandlePartialMessage(priority, voiceSelected, msg.Trim(), e);
-            return new MessageResult(MessageStatus.None, user.TwitchUserId, chatterId, emotesUsed);
+            return new MessageResult(MessageStatus.None, _user.TwitchUserId, chatterId, emotesUsed);
         }
 
         HandlePartialMessage(priority, voiceSelected, msg.Substring(0, matches.First().Index).Trim(), e);
@@ -230,7 +213,7 @@ public class ChatMessageHandler
         if (tasks.Any())
             await Task.WhenAll(tasks);
 
-        return new MessageResult(MessageStatus.None, user.TwitchUserId, chatterId, emotesUsed);
+        return new MessageResult(MessageStatus.None, _user.TwitchUserId, chatterId, emotesUsed);
     }
 
     private void HandlePartialMessage(int priority, string voice, string message, OnMessageReceivedArgs e)

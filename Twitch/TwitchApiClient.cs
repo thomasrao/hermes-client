@@ -6,28 +6,32 @@ using TwitchLib.Api.Core.Exceptions;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
 using TwitchLib.Communication.Events;
-using static TwitchChatTTS.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using TwitchLib.PubSub.Interfaces;
 using TwitchLib.Client.Interfaces;
 using TwitchChatTTS.OBS.Socket;
+using TwitchChatTTS.Twitch.Redemptions;
 
 public class TwitchApiClient
 {
+    private readonly RedemptionManager _redemptionManager;
+    private readonly HermesApiClient _hermesApiClient;
     private readonly Configuration _configuration;
-    private readonly ILogger _logger;
-    private TwitchBotAuth _token;
+    private readonly TwitchBotAuth _token;
     private readonly ITwitchClient _client;
     private readonly ITwitchPubSub _publisher;
     private readonly WebClientWrap _web;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ILogger _logger;
     private bool _initialized;
     private string _broadcasterId;
 
 
     public TwitchApiClient(
+        RedemptionManager redemptionManager,
+        HermesApiClient hermesApiClient,
         Configuration configuration,
         TwitchBotAuth token,
         ITwitchClient twitchClient,
@@ -36,6 +40,8 @@ public class TwitchApiClient
         ILogger logger
     )
     {
+        _redemptionManager = redemptionManager;
+        _hermesApiClient = hermesApiClient;
         _configuration = configuration;
         _token = token;
         _client = twitchClient;
@@ -43,6 +49,7 @@ public class TwitchApiClient
         _serviceProvider = serviceProvider;
         _logger = logger;
         _initialized = false;
+        _broadcasterId = string.Empty;
 
         _web = new WebClientWrap(new JsonSerializerOptions()
         {
@@ -126,6 +133,9 @@ public class TwitchApiClient
 
             _logger.Information("Attempting to re-authorize.");
             await Authorize(_broadcasterId);
+            await _client.DisconnectAsync();
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            await _client.ConnectAsync();
         };
 
         _client.OnConnectionError += async Task (object? s, OnConnectionErrorArgs e) =>
@@ -159,67 +169,49 @@ public class TwitchApiClient
             if (_configuration.Twitch?.TtsWhenOffline != true && client?.Live == false)
                 return;
 
-            _logger.Information("Follow: " + e.DisplayName);
+            _logger.Information($"New Follower [name: {e.DisplayName}][username: {e.Username}]");
         };
 
-        _publisher.OnChannelPointsRewardRedeemed += (s, e) =>
+        _publisher.OnChannelPointsRewardRedeemed += async (s, e) =>
         {
             var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs") as OBSSocketClient;
             if (_configuration.Twitch?.TtsWhenOffline != true && client?.Live == false)
                 return;
 
-            _logger.Information($"Channel Point Reward Redeemed [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][id: {e.RewardRedeemed.Redemption.Id}]");
+            _logger.Information($"Channel Point Reward Redeemed [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
 
-            if (_configuration.Twitch?.Redeems == null)
-                return;
-
-            var redeemName = e.RewardRedeemed.Redemption.Reward.Title.ToLower().Trim().Replace(" ", "-");
-            if (!_configuration.Twitch.Redeems.TryGetValue(redeemName, out RedeemConfiguration? redeem))
-                return;
-
-            if (redeem == null)
-                return;
-
-            // Write or append to file if needed.
-            var outputFile = string.IsNullOrWhiteSpace(redeem.OutputFilePath) ? null : redeem.OutputFilePath.Trim();
-            if (outputFile == null)
+            var actions = _redemptionManager.Get(e.RewardRedeemed.Redemption.Reward.Id);
+            if (!actions.Any())
             {
-                _logger.Debug($"No output file was provided for redeem [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][id: {e.RewardRedeemed.Redemption.Id}]");
+                _logger.Debug($"No redemable actions for this redeem was found [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
+                return;
             }
-            else
-            {
-                var outputContent = string.IsNullOrWhiteSpace(redeem.OutputContent) ? null : redeem.OutputContent.Trim().Replace("%USER%", e.RewardRedeemed.Redemption.User.DisplayName).Replace("\\n", "\n");
-                if (outputContent == null)
+            _logger.Debug($"Found {actions.Count} actions for this Twitch channel point redemption [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
+
+            foreach (var action in actions)
+                try
                 {
-                    _logger.Warning($"No output content was provided for redeem [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][id: {e.RewardRedeemed.Redemption.Id}]");
+                    await _redemptionManager.Execute(action, e.RewardRedeemed.Redemption.User.DisplayName);
                 }
-                else
+                catch (Exception ex)
                 {
-                    if (redeem.OutputAppend == true)
-                    {
-                        File.AppendAllText(outputFile, outputContent + "\n");
-                    }
-                    else
-                    {
-                        File.WriteAllText(outputFile, outputContent);
-                    }
+                    _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
                 }
-            }
+        };
 
-            // Play audio file if needed.
-            var audioFile = string.IsNullOrWhiteSpace(redeem.AudioFilePath) ? null : redeem.AudioFilePath.Trim();
-            if (audioFile == null)
+        _publisher.OnPubSubServiceClosed += async (s, e) =>
+        {
+            _logger.Warning("Twitch PubSub ran into a service close. Attempting to connect again.");
+            //await Task.Delay(Math.Min(3000 + (1 << psConnectionFailures), 120000));
+            var authorized = await Authorize(_broadcasterId);
+
+            var twitchBotData = await _hermesApiClient.FetchTwitchBotToken();
+            if (twitchBotData == null)
             {
-                _logger.Debug($"No audio file was provided for redeem [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][id: {e.RewardRedeemed.Redemption.Id}]");
+                Console.WriteLine("The API is down. Contact the owner.");
+                return;
             }
-            else if (!File.Exists(audioFile))
-            {
-                _logger.Warning($"Cannot find audio file [location: {audioFile}] for redeem [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][id: {e.RewardRedeemed.Redemption.Id}]");
-            }
-            else
-            {
-                AudioPlaybackEngine.Instance.PlaySound(audioFile);
-            }
+            await _publisher.ConnectAsync();
         };
     }
 

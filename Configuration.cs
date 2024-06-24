@@ -15,15 +15,7 @@ namespace TwitchChatTTS
 
         public class TwitchConfiguration {
             public IEnumerable<string>? Channels;
-            public IDictionary<string, RedeemConfiguration>? Redeems;
             public bool? TtsWhenOffline;
-        }
-
-        public class RedeemConfiguration {
-            public string? AudioFilePath;
-            public string? OutputFilePath;
-            public string? OutputContent;
-            public bool? OutputAppend;
         }
 
         public class OBSConfiguration {

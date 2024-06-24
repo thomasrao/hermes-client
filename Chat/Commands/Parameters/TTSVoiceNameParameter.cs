@@ -1,23 +1,21 @@
-using Microsoft.Extensions.DependencyInjection;
 namespace TwitchChatTTS.Chat.Commands.Parameters
 {
     public class TTSVoiceNameParameter : ChatCommandParameter
     {
-        private IServiceProvider _serviceProvider;
+        private readonly User _user;
 
-        public TTSVoiceNameParameter(IServiceProvider serviceProvider, bool optional = false) : base("TTS Voice Name", "Name of a TTS voice", optional)
+        public TTSVoiceNameParameter(User user, bool optional = false) : base("TTS Voice Name", "Name of a TTS voice", optional)
         {
-            _serviceProvider = serviceProvider;
+            _user = user;
         }
 
         public override bool Validate(string value)
         {
-            var user = _serviceProvider.GetRequiredService<User>();
-            if (user.VoicesAvailable == null)
+            if (_user.VoicesAvailable == null)
                 return false;
 
             value = value.ToLower();
-            return user.VoicesAvailable.Any(e => e.Value.ToLower() == value);
+            return _user.VoicesAvailable.Any(e => e.Value.ToLower() == value);
         }
     }
 }

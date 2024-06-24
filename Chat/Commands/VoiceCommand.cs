@@ -10,16 +10,19 @@ namespace TwitchChatTTS.Chat.Commands
 {
     public class VoiceCommand : ChatCommand
     {
-        private IServiceProvider _serviceProvider;
-        private ILogger _logger;
+        private readonly User _user;
+        private readonly SocketClient<WebSocketMessage> _hermesClient;
+        private readonly ILogger _logger;
 
         public VoiceCommand(
             [FromKeyedServices("parameter-ttsvoicename")] ChatCommandParameter ttsVoiceParameter,
-            IServiceProvider serviceProvider,
+            User user,
+            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermesClient,
             ILogger logger
         ) : base("voice", "Select a TTS voice as the default for that user.")
         {
-            _serviceProvider = serviceProvider;
+            _user = user;
+            _hermesClient = hermesClient;
             _logger = logger;
 
             AddParameter(ttsVoiceParameter);
@@ -32,23 +35,19 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
         {
-            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("hermes");
-            if (client == null)
-                return;
-            var context = _serviceProvider.GetRequiredService<User>();
-            if (context == null || context.VoicesSelected == null || context.VoicesAvailable == null)
+            if (_user == null || _user.VoicesSelected == null || _user.VoicesAvailable == null)
                 return;
 
             long chatterId = long.Parse(message.UserId);
             var voiceName = args.First().ToLower();
-            var voice = context.VoicesAvailable.First(v => v.Value.ToLower() == voiceName);
+            var voice = _user.VoicesAvailable.First(v => v.Value.ToLower() == voiceName);
 
-            await client.Send(3, new RequestMessage()
+            await _hermesClient.Send(3, new RequestMessage()
             {
-                Type = context.VoicesSelected.ContainsKey(chatterId) ? "update_tts_user" : "create_tts_user",
+                Type = _user.VoicesSelected.ContainsKey(chatterId) ? "update_tts_user" : "create_tts_user",
                 Data = new Dictionary<string, object>() { { "chatter", chatterId }, { "voice", voice.Key } }
             });
-            _logger.Information($"Updated {message.Username}'s [id: {chatterId}] tts voice to {voice.Value} (id: {voice.Key}).");
+            _logger.Information($"Updated chat TTS voice [voice: {voice.Value}][username: {message.Username}].");
         }
     }
 }

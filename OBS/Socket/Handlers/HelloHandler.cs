@@ -10,30 +10,30 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
 {
     public class HelloHandler : IWebSocketHandler
     {
-        private ILogger _logger { get; }
-        public int OperationCode { get; set; } = 0;
-        private HelloContext _context { get; }
+        private readonly HelloContext _context;
+        private readonly ILogger _logger;
+        public int OperationCode { get; } = 0;
 
-        public HelloHandler(ILogger logger, HelloContext context)
+        public HelloHandler(HelloContext context, ILogger logger)
         {
-            _logger = logger;
             _context = context;
+            _logger = logger;
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
+        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
-            if (message is not HelloMessage obj || obj == null)
+            if (data is not HelloMessage message || message == null)
                 return;
 
             _logger.Verbose("OBS websocket password: " + _context.Password);
-            if (obj.Authentication == null || string.IsNullOrWhiteSpace(_context.Password))
+            if (message.Authentication == null || string.IsNullOrWhiteSpace(_context.Password))
             {
-                await sender.Send(1, new IdentifyMessage(obj.RpcVersion, string.Empty, 1023 | 262144));
+                await sender.Send(1, new IdentifyMessage(message.RpcVersion, string.Empty, 1023 | 262144));
                 return;
             }
 
-            var salt = obj.Authentication.Salt;
-            var challenge = obj.Authentication.Challenge;
+            var salt = message.Authentication.Salt;
+            var challenge = message.Authentication.Challenge;
             _logger.Verbose("Salt: " + salt);
             _logger.Verbose("Challenge: " + challenge);
 
@@ -52,7 +52,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             }
 
             _logger.Verbose("Final hash: " + hash);
-            await sender.Send(1, new IdentifyMessage(obj.RpcVersion, hash, 1023 | 262144));
+            await sender.Send(1, new IdentifyMessage(message.RpcVersion, hash, 1023 | 262144));
         }
     }
 }

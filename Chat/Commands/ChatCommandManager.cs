@@ -7,9 +7,9 @@ namespace TwitchChatTTS.Chat.Commands
     public class ChatCommandManager
     {
         private IDictionary<string, ChatCommand> _commands;
-        private TwitchBotAuth _token;
-        private IServiceProvider _serviceProvider;
-        private ILogger _logger;
+        private readonly TwitchBotAuth _token;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly ILogger _logger;
         private string CommandStartSign { get; } = "!";
 
 
@@ -44,11 +44,11 @@ namespace TwitchChatTTS.Chat.Commands
                 var command = _serviceProvider.GetKeyedService<ChatCommand>(key);
                 if (command == null)
                 {
-                    _logger.Error("Failed to add command: " + type.AssemblyQualifiedName);
+                    _logger.Error("Failed to add chat command: " + type.AssemblyQualifiedName);
                     continue;
                 }
 
-                _logger.Debug($"Added command {type.AssemblyQualifiedName}.");
+                _logger.Debug($"Added chat command {type.AssemblyQualifiedName}");
                 Add(command);
             }
         }
@@ -72,19 +72,20 @@ namespace TwitchChatTTS.Chat.Commands
 
             if (!_commands.TryGetValue(com, out ChatCommand? command) || command == null)
             {
-                _logger.Debug($"Failed to find command named '{com}'.");
+                // Could be for another bot or just misspelled.
+                _logger.Debug($"Failed to find command named '{com}' [args: {arg}][chatter: {message.Username}][cid: {message.UserId}]");
                 return ChatCommandResult.Missing;
             }
 
             if (!await command.CheckPermissions(message, broadcasterId) && message.UserId != "126224566" && !message.IsStaff)
             {
-                _logger.Warning($"Chatter is missing permission to execute command named '{com}'.");
+                _logger.Warning($"Chatter is missing permission to execute command named '{com}' [args: {arg}][chatter: {message.Username}][cid: {message.UserId}]");
                 return ChatCommandResult.Permission;
             }
 
             if (command.Parameters.Count(p => !p.Optional) > args.Length)
             {
-                _logger.Warning($"Command syntax issue when executing command named '{com}' with the following args: {string.Join(" ", args)}");
+                _logger.Warning($"Command syntax issue when executing command named '{com}' [args: {arg}][chatter: {message.Username}][cid: {message.UserId}]");
                 return ChatCommandResult.Syntax;
             }
 

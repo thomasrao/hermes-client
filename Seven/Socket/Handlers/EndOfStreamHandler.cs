@@ -9,22 +9,22 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 {
     public class EndOfStreamHandler : IWebSocketHandler
     {
-        private ILogger Logger { get; }
-        private User User { get; }
-        private IServiceProvider ServiceProvider { get; }
-        private string[] ErrorCodes { get; }
-        private int[] ReconnectDelay { get; }
+        private readonly ILogger _logger;
+        private readonly User _user;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly string[] _errorCodes;
+        private readonly int[] _reconnectDelay;
 
-        public int OperationCode { get; set; } = 7;
+        public int OperationCode { get; } = 7;
 
 
         public EndOfStreamHandler(ILogger logger, User user, IServiceProvider serviceProvider)
         {
-            Logger = logger;
-            User = user;
-            ServiceProvider = serviceProvider;
+            _logger = logger;
+            _user = user;
+            _serviceProvider = serviceProvider;
 
-            ErrorCodes = [
+            _errorCodes = [
                 "Server Error",
                 "Unknown Operation",
                 "Invalid Payload",
@@ -39,61 +39,62 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                 "Insufficient Privilege",
                 "Inactivity?"
             ];
-            ReconnectDelay = [
+            _reconnectDelay = [
                 1000,
-                -1,
-                -1,
-                -1,
-                -1,
+                0,
+                0,
+                0,
+                0,
                 3000,
                 1000,
                 300000,
                 1000,
-                -1,
-                -1,
+                0,
+                0,
                 1000,
                 1000
             ];
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
+        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
-            if (message is not EndOfStreamMessage obj || obj == null)
+            if (data is not EndOfStreamMessage message || message == null)
                 return;
 
-            var code = obj.Code - 4000;
-            if (code >= 0 && code < ErrorCodes.Length)
-                Logger.Warning($"Received end of stream message (reason: {ErrorCodes[code]}, code: {obj.Code}, message: {obj.Message}).");
+            var code = message.Code - 4000;
+            if (code >= 0 && code < _errorCodes.Length)
+                _logger.Warning($"Received end of stream message (reason: {_errorCodes[code]}, code: {message.Code}, message: {message.Message}).");
             else
-                Logger.Warning($"Received end of stream message (code: {obj.Code}, message: {obj.Message}).");
+                _logger.Warning($"Received end of stream message (code: {message.Code}, message: {message.Message}).");
 
             await sender.DisconnectAsync();
 
-            if (code >= 0 && code < ReconnectDelay.Length && ReconnectDelay[code] < 0)
+            if (code >= 0 && code < _reconnectDelay.Length && _reconnectDelay[code] < 0)
             {
-                Logger.Error($"7tv client will remain disconnected due to a bad client implementation.");
+                _logger.Error($"7tv client will remain disconnected due to a bad client implementation.");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(User.SevenEmoteSetId))
+            if (string.IsNullOrWhiteSpace(_user.SevenEmoteSetId))
                 return;
 
-            var context = ServiceProvider.GetRequiredService<ReconnectContext>();
-            await Task.Delay(ReconnectDelay[code]);
+            var context = _serviceProvider.GetRequiredService<ReconnectContext>();
+            if (_reconnectDelay[code] > 0)
+                await Task.Delay(_reconnectDelay[code]);
 
-            var base_url = $"@emote_set.*<object_id={User.SevenEmoteSetId}>";
+            var base_url = $"@emote_set.*<object_id={_user.SevenEmoteSetId}>";
             string url = $"{SevenApiClient.WEBSOCKET_URL}{base_url}";
-            Logger.Debug($"7tv websocket reconnecting to {url}.");
+            _logger.Debug($"7tv websocket reconnecting to {url}.");
 
             await sender.ConnectAsync(url);
             if (context.SessionId != null)
             {
                 await sender.Send(34, new ResumeMessage() { SessionId = context.SessionId });
-                Logger.Information("Resumed connection to 7tv websocket.");
+                _logger.Information("Resumed connection to 7tv websocket.");
             }
             else
             {
-                Logger.Information("Resumed connection to 7tv websocket on a different session.");
+                _logger.Information("Resumed connection to 7tv websocket on a different session.");
             }
         }
     }

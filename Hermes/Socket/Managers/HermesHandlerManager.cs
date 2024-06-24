@@ -9,7 +9,6 @@ namespace TwitchChatTTS.Hermes.Socket.Managers
     {
         public HermesHandlerManager(ILogger logger, IServiceProvider provider) : base(logger)
         {
-            //Add(provider.GetRequiredService<HeartbeatHandler>());
             try
             {
                 var basetype = typeof(IWebSocketHandler);
@@ -29,13 +28,13 @@ namespace TwitchChatTTS.Hermes.Socket.Managers
                         continue;
                     }
 
-                    Logger.Debug($"Linked type {type.AssemblyQualifiedName} to hermes websocket handlers.");
+                    _logger.Debug($"Linked type {type.AssemblyQualifiedName} to hermes websocket handlers.");
                     Add(handler);
                 }
             }
             catch (Exception e)
             {
-                Logger.Error(e, "Failed to load hermes websocket handler types.");
+                _logger.Error(e, "Failed to load hermes websocket handler types.");
             }
         }
     }

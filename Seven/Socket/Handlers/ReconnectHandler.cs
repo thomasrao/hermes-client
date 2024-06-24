@@ -7,20 +7,20 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 {
     public class ReconnectHandler : IWebSocketHandler
     {
-        private ILogger Logger { get; }
-        public int OperationCode { get; set; } = 4;
+        private readonly ILogger _logger;
+        public int OperationCode { get; } = 4;
 
         public ReconnectHandler(ILogger logger)
         {
-            Logger = logger;
+            _logger = logger;
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
+        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
-            if (message is not ReconnectMessage obj || obj == null)
+            if (data is not ReconnectMessage message || message == null)
                 return;
 
-            Logger.Information($"7tv server wants us to reconnect (reason: {obj.Reason}).");
+            _logger.Information($"7tv server wants this client to reconnect (reason: {message.Reason}).");
         }
     }
 }

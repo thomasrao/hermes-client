@@ -7,9 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using NAudio.Wave.SampleProviders;
-using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.Seven;
 using TwitchLib.Client.Events;
+using TwitchChatTTS.Twitch.Redemptions;
+using org.mariuszgromada.math.mxparser;
 
 namespace TwitchChatTTS
 {
@@ -18,17 +19,28 @@ namespace TwitchChatTTS
         public const int MAJOR_VERSION = 3;
         public const int MINOR_VERSION = 3;
 
-        private readonly ILogger _logger;
+        private readonly RedemptionManager _redemptionManager;
         private readonly Configuration _configuration;
         private readonly TTSPlayer _player;
         private readonly IServiceProvider _serviceProvider;
+        private readonly ILogger _logger;
 
-        public TTS(ILogger logger, Configuration configuration, TTSPlayer player, IServiceProvider serviceProvider)
+        public TTS(
+            User user,
+            HermesApiClient hermesApiClient,
+            SevenApiClient sevenApiClient,
+            RedemptionManager redemptionManager,
+            Configuration configuration,
+            TTSPlayer player,
+            IServiceProvider serviceProvider,
+            ILogger logger
+        )
         {
-            _logger = logger;
+            _redemptionManager = redemptionManager;
             _configuration = configuration;
             _player = player;
             _serviceProvider = serviceProvider;
+            _logger = logger;
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
@@ -69,6 +81,8 @@ namespace TwitchChatTTS
             var emoteSet = await seven.FetchChannelEmoteSet(user.TwitchUserId.ToString());
             user.SevenEmoteSetId = emoteSet?.Id;
 
+            License.iConfirmCommercialUse("abcdef");
+
             await InitializeEmotes(seven, emoteSet);
             await InitializeHermesWebsocket();
             await InitializeSevenTv(emoteSet.Id);
@@ -106,14 +120,14 @@ namespace TwitchChatTTS
                         var provider = new CachedWavProvider(sound);
                         var data = AudioPlaybackEngine.Instance.ConvertSound(provider);
                         var resampled = new WdlResamplingSampleProvider(data, AudioPlaybackEngine.Instance.SampleRate);
-                        _logger.Debug("Fetched TTS audio data.");
+                        _logger.Verbose("Fetched TTS audio data.");
 
                         m.Audio = resampled;
                         _player.Ready(m);
                     }
                     catch (COMException e)
                     {
-                        _logger.Error(e, "Failed to send request for TTS (HResult: " + e.HResult + ").");
+                        _logger.Error(e, "Failed to send request for TTS [HResult: " + e.HResult + "]");
                     }
                     catch (Exception e)
                     {
@@ -187,7 +201,7 @@ namespace TwitchChatTTS
 
             var twitchBotToken = await hermes.FetchTwitchBotToken();
             user.TwitchUserId = long.Parse(twitchBotToken.BroadcasterId);
-            _logger.Information($"Username: {user.TwitchUsername} (id: {user.TwitchUserId})");
+            _logger.Information($"Username: {user.TwitchUsername} [id: {user.TwitchUserId}]");
 
             user.DefaultTTSVoice = await hermes.FetchTTSDefaultVoice();
             _logger.Information("Default Voice: " + user.DefaultTTSVoice);
@@ -207,13 +221,23 @@ namespace TwitchChatTTS
 
             var voicesEnabled = await hermes.FetchTTSEnabledVoices();
             if (voicesEnabled == null || !voicesEnabled.Any())
-                user.VoicesEnabled = new HashSet<string>(new string[] { "Brian" });
+                user.VoicesEnabled = new HashSet<string>(["Brian"]);
             else
                 user.VoicesEnabled = new HashSet<string>(voicesEnabled.Select(v => v));
             _logger.Information($"{user.VoicesEnabled.Count} TTS voices have been enabled.");
 
             var defaultedChatters = voicesSelected.Where(item => item.Voice == null || !user.VoicesEnabled.Contains(item.Voice));
-            _logger.Information($"{defaultedChatters.Count()} chatters will have their TTS voice set to default due to having selected a disabled TTS voice.");
+            if (defaultedChatters.Any())
+                _logger.Information($"{defaultedChatters.Count()} chatter(s) will have their TTS voice set to default due to having selected a disabled TTS voice.");
+
+            var redemptionActions = await hermes.FetchRedeemableActions();
+            var redemptions = await hermes.FetchRedemptions();
+            foreach (var action in redemptionActions)
+                _redemptionManager.AddAction(action);
+            foreach (var redemption in redemptions)
+                _redemptionManager.AddTwitchRedemption(redemption);
+            _redemptionManager.Ready();
+            _logger.Information($"Redemption Manager is ready with {redemptionActions.Count()} actions & {redemptions.Count()} redemptions.");
         }
 
         private async Task InitializeHermesWebsocket()
@@ -221,7 +245,7 @@ namespace TwitchChatTTS
             try
             {
                 _logger.Information("Initializing hermes websocket client.");
-                var hermesClient = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("hermes") as HermesSocketClient;
+                var hermesClient = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("hermes");
                 var url = "wss://hermes-ws.goblincaves.com";
                 _logger.Debug($"Attempting to connect to {url}");
                 await hermesClient.ConnectAsync(url);

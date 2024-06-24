@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchLib.Client.Models;
 
@@ -6,13 +5,13 @@ namespace TwitchChatTTS.Chat.Commands
 {
     public class SkipCommand : ChatCommand
     {
-        private IServiceProvider _serviceProvider;
-        private ILogger _logger;
+        private readonly TTSPlayer _ttsPlayer;
+        private readonly ILogger _logger;
 
-        public SkipCommand(IServiceProvider serviceProvider, ILogger logger)
+        public SkipCommand(TTSPlayer ttsPlayer, ILogger logger)
         : base("skip", "Skips the current text to speech message.")
         {
-            _serviceProvider = serviceProvider;
+            _ttsPlayer = ttsPlayer;
             _logger = logger;
         }
 
@@ -23,12 +22,11 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
         {
-            var player = _serviceProvider.GetRequiredService<TTSPlayer>();
-            if (player.Playing == null)
+            if (_ttsPlayer.Playing == null)
                 return;
 
-            AudioPlaybackEngine.Instance.RemoveMixerInput(player.Playing);
-            player.Playing = null;
+            AudioPlaybackEngine.Instance.RemoveMixerInput(_ttsPlayer.Playing);
+            _ttsPlayer.Playing = null;
 
             _logger.Information("Skipped current tts.");
         }

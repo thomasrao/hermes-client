@@ -74,7 +74,7 @@ namespace TwitchChatTTS.Hermes.Socket
                     UserId = null;
                     _heartbeatTimer.Enabled = false;
 
-                    _logger.Information("Logged off due to disconnection. Attempting to reconnect...");
+                    _logger.Warning("Logged off due to disconnection. Attempting to reconnect...");
                     _reconnectTimer.Enabled = true;
                 }
             }

@@ -7,27 +7,25 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 {
     public class SevenHelloHandler : IWebSocketHandler
     {
-        private ILogger Logger { get; }
-        private Configuration Configuration { get; }
-        public int OperationCode { get; set; } = 1;
+        private readonly ILogger _logger;
+        public int OperationCode { get; } = 1;
 
-        public SevenHelloHandler(ILogger logger, Configuration configuration)
+        public SevenHelloHandler(ILogger logger)
         {
-            Logger = logger;
-            Configuration = configuration;
+            _logger = logger;
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
+        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
-            if (message is not SevenHelloMessage obj || obj == null)
+            if (data is not SevenHelloMessage message || message == null)
                 return;
 
             if (sender is not SevenSocketClient seven || seven == null)
                 return;
 
             seven.Connected = true;
-            seven.ConnectionDetails = obj;
-            Logger.Information("Connected to 7tv websockets.");
+            seven.ConnectionDetails = message;
+            _logger.Information("Connected to 7tv websockets.");
         }
     }
 }

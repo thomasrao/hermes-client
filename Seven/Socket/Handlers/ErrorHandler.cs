@@ -7,17 +7,17 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 {
     public class ErrorHandler : IWebSocketHandler
     {
-        private ILogger Logger { get; }
-        public int OperationCode { get; set; } = 6;
+        private readonly ILogger _logger;
+        public int OperationCode { get; } = 6;
 
         public ErrorHandler(ILogger logger)
         {
-            Logger = logger;
+            _logger = logger;
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data message)
+        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
-            if (message is not ErrorMessage obj || obj == null)
+            if (data is not ErrorMessage message || message == null)
                 return;
         }
     }
