@@ -22,14 +22,6 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
 
             sender.Connected = true;
             _logger.Information("Connected to OBS via rpc version " + message.NegotiatedRpcVersion + ".");
-
-            await Task.Delay(TimeSpan.FromSeconds(5));
-
-            /*var messages = new RequestMessage[] {
-                //new RequestMessage("Sleep", string.Empty, new Dictionary<string, object>() { { "sleepMillis", 5000 } }),
-                new RequestMessage("GetSceneItemId", string.Empty, new Dictionary<string, object>() { { "sceneName", "Generic" }, { "sourceName", "ABCDEF" } }),
-            };
-            await _manager.Send(messages);*/
         }
     }
 }

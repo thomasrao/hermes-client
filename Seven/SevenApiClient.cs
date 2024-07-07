@@ -2,12 +2,11 @@ using System.Text.Json;
 using TwitchChatTTS.Helpers;
 using Serilog;
 using TwitchChatTTS.Seven;
-using TwitchChatTTS;
 
 public class SevenApiClient
 {
-    public static readonly string API_URL = "https://7tv.io/v3";
-    public static readonly string WEBSOCKET_URL = "wss://events.7tv.io/v3";
+    public const string API_URL = "https://7tv.io/v3";
+    public const string WEBSOCKET_URL = "wss://events.7tv.io/v3";
 
     private readonly WebClientWrap _web;
     private readonly ILogger _logger;
@@ -32,11 +31,11 @@ public class SevenApiClient
         }
         catch (JsonException e)
         {
-            _logger.Error(e, "Failed to fetch emotes from 7tv due to improper JSON.");
+            _logger.Error(e, "Failed to fetch channel emotes from 7tv due to improper JSON.");
         }
         catch (Exception e)
         {
-            _logger.Error(e, "Failed to fetch emotes from 7tv.");
+            _logger.Error(e, "Failed to fetch channel emotes from 7tv.");
         }
         return null;
     }
@@ -50,11 +49,11 @@ public class SevenApiClient
         }
         catch (JsonException e)
         {
-            _logger.Error(e, "Failed to fetch emotes from 7tv due to improper JSON.");
+            _logger.Error(e, "Failed to fetch global emotes from 7tv due to improper JSON.");
         }
         catch (Exception e)
         {
-            _logger.Error(e, "Failed to fetch emotes from 7tv.");
+            _logger.Error(e, "Failed to fetch global emotes from 7tv.");
         }
         return null;
     }

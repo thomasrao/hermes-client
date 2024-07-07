@@ -64,6 +64,7 @@ public class TwitchApiClient
     {
         try
         {
+            _logger.Debug($"Attempting to authorize Twitch API [id: {broadcasterId}]");
             var authorize = await _web.GetJson<TwitchBotAuth>("https://hermes.goblincaves.com/api/account/reauthorize");
             if (authorize != null && broadcasterId == authorize.BroadcasterId)
             {
@@ -71,7 +72,10 @@ public class TwitchApiClient
                 _token.RefreshToken = authorize.RefreshToken;
                 _token.UserId = authorize.UserId;
                 _token.BroadcasterId = authorize.BroadcasterId;
+                _token.ExpiresIn = authorize.ExpiresIn;
+                _token.UpdatedAt = DateTime.Now;
                 _logger.Information("Updated Twitch API tokens.");
+                _logger.Debug($"Twitch API Auth data [user id: {_token.UserId}][id: {_token.BroadcasterId}][expires in: {_token.ExpiresIn}][expires at: {_token.ExpiresAt.ToShortTimeString()}]");
             }
             else if (authorize != null)
             {
@@ -79,6 +83,7 @@ public class TwitchApiClient
                 return false;
             }
             _broadcasterId = broadcasterId;
+            _logger.Debug($"Authorized Twitch API [id: {broadcasterId}]");
             return true;
         }
         catch (HttpResponseException e)
@@ -90,6 +95,7 @@ public class TwitchApiClient
         }
         catch (JsonException)
         {
+            _logger.Debug($"Failed to Authorize Twitch API due to JSON error [id: {broadcasterId}]");
         }
         catch (Exception e)
         {
@@ -191,7 +197,7 @@ public class TwitchApiClient
             foreach (var action in actions)
                 try
                 {
-                    await _redemptionManager.Execute(action, e.RewardRedeemed.Redemption.User.DisplayName);
+                    await _redemptionManager.Execute(action, e.RewardRedeemed.Redemption.User.DisplayName, long.Parse(e.RewardRedeemed.Redemption.User.Id));
                 }
                 catch (Exception ex)
                 {

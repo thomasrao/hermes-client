@@ -30,7 +30,7 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
         {
-            return message.IsBroadcaster;
+            return false;
         }
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)

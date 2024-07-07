@@ -12,11 +12,12 @@ namespace TwitchChatTTS
         public long TwitchUserId { get; set; }
         public string TwitchUsername { get; set; }
         public string SevenEmoteSetId { get; set; }
+        public long? OwnerId { get; set; }
 
         public string DefaultTTSVoice { get; set; }
         // voice id -> voice name
         public IDictionary<string, string> VoicesAvailable { get => _voicesAvailable; set { _voicesAvailable = value; WordFilterRegex = GenerateEnabledVoicesRegex(); } }
-        // chatter/twitch id -> voice name
+        // chatter/twitch id -> voice id
         public IDictionary<long, string> VoicesSelected { get; set; }
         // voice names
         public HashSet<string> VoicesEnabled { get => _voicesEnabled; set { _voicesEnabled = value; WordFilterRegex = GenerateEnabledVoicesRegex(); } }

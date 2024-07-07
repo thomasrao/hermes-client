@@ -35,19 +35,23 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
         {
-            if (_user == null || _user.VoicesSelected == null || _user.VoicesAvailable == null)
+            if (_user == null || _user.VoicesSelected == null || _user.VoicesEnabled == null)
                 return;
 
             long chatterId = long.Parse(message.UserId);
             var voiceName = args.First().ToLower();
             var voice = _user.VoicesAvailable.First(v => v.Value.ToLower() == voiceName);
+            var enabled = _user.VoicesEnabled.Contains(voice.Value);
 
-            await _hermesClient.Send(3, new RequestMessage()
+            if (enabled)
             {
-                Type = _user.VoicesSelected.ContainsKey(chatterId) ? "update_tts_user" : "create_tts_user",
-                Data = new Dictionary<string, object>() { { "chatter", chatterId }, { "voice", voice.Key } }
-            });
-            _logger.Information($"Updated chat TTS voice [voice: {voice.Value}][username: {message.Username}].");
+                await _hermesClient.Send(3, new RequestMessage()
+                {
+                    Type = _user.VoicesSelected.ContainsKey(chatterId) ? "update_tts_user" : "create_tts_user",
+                    Data = new Dictionary<string, object>() { { "chatter", chatterId }, { "voice", voice.Key } }
+                });
+                _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {message.Username}].");
+            }
         }
     }
 }

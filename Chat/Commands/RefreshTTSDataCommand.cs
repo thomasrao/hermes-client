@@ -1,4 +1,5 @@
 using Serilog;
+using TwitchChatTTS.Twitch.Redemptions;
 using TwitchLib.Client.Models;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -6,13 +7,15 @@ namespace TwitchChatTTS.Chat.Commands
     public class RefreshTTSDataCommand : ChatCommand
     {
         private readonly User _user;
+        private readonly RedemptionManager _redemptionManager;
         private readonly HermesApiClient _hermesApi;
         private readonly ILogger _logger;
 
-        public RefreshTTSDataCommand(User user, HermesApiClient hermesApi, ILogger logger)
+        public RefreshTTSDataCommand(User user, RedemptionManager redemptionManager, HermesApiClient hermesApi, ILogger logger)
         : base("refresh", "Refreshes certain TTS related data on the client.")
         {
             _user = user;
+            _redemptionManager = redemptionManager;
             _hermesApi = hermesApi;
             _logger = logger;
         }
@@ -51,7 +54,13 @@ namespace TwitchChatTTS.Chat.Commands
                     break;
                 case "default_voice":
                     _user.DefaultTTSVoice = await _hermesApi.FetchTTSDefaultVoice();
-                    _logger.Information("Default Voice: " + _user.DefaultTTSVoice);
+                    _logger.Information("TTS Default Voice: " + _user.DefaultTTSVoice);
+                    break;
+                case "redemptions":
+                    var redemptionActions = await _hermesApi.FetchRedeemableActions();
+                    var redemptions = await _hermesApi.FetchRedemptions();
+                    _redemptionManager.Initialize(redemptions, redemptionActions.ToDictionary(a => a.Name, a => a));
+                    _logger.Information($"Redemption Manager has been refreshed with {redemptionActions.Count()} actions & {redemptions.Count()} redemptions.");
                     break;
             }
         }

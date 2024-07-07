@@ -32,7 +32,7 @@ namespace TwitchChatTTS.Chat.Commands
 
         public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
         {
-            return message.IsBroadcaster;
+            return message.IsModerator || message.IsBroadcaster;
         }
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
@@ -52,6 +52,7 @@ namespace TwitchChatTTS.Chat.Commands
                         Type = "update_tts_voice_state",
                         Data = new Dictionary<string, object>() { { "voice", voiceId }, { "state", true } }
                     });
+                    _logger.Information($"Enabled a TTS voice [voice: {voiceName}][invoker: {message.Username}][id: {message.UserId}]");
                     break;
                 case "disable":
                     await _hermesClient.Send(3, new RequestMessage()
@@ -59,17 +60,9 @@ namespace TwitchChatTTS.Chat.Commands
                         Type = "update_tts_voice_state",
                         Data = new Dictionary<string, object>() { { "voice", voiceId }, { "state", false } }
                     });
-                    break;
-                case "remove":
-                    await _hermesClient.Send(3, new RequestMessage()
-                    {
-                        Type = "delete_tts_voice",
-                        Data = new Dictionary<string, object>() { { "voice", voiceId } }
-                    });
+                    _logger.Information($"Disabled a TTS voice [voice: {voiceName}][invoker: {message.Username}][id: {message.UserId}]");
                     break;
             }
-
-            _logger.Information($"Added a new TTS voice [voice: {voiceName}][invoker: {message.Username}][id: {message.UserId}]");
         }
     }
 }

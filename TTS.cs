@@ -17,8 +17,11 @@ namespace TwitchChatTTS
     public class TTS : IHostedService
     {
         public const int MAJOR_VERSION = 3;
-        public const int MINOR_VERSION = 3;
+        public const int MINOR_VERSION = 6;
 
+        private readonly User _user;
+        private readonly HermesApiClient _hermesApiClient;
+        private readonly SevenApiClient _sevenApiClient;
         private readonly RedemptionManager _redemptionManager;
         private readonly Configuration _configuration;
         private readonly TTSPlayer _player;
@@ -36,6 +39,9 @@ namespace TwitchChatTTS
             ILogger logger
         )
         {
+            _user = user;
+            _hermesApiClient = hermesApiClient;
+            _sevenApiClient = sevenApiClient;
             _redemptionManager = redemptionManager;
             _configuration = configuration;
             _player = player;
@@ -46,12 +52,14 @@ namespace TwitchChatTTS
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             Console.Title = "TTS - Twitch Chat";
+            License.iConfirmCommercialUse("abcdef");
 
-            var user = _serviceProvider.GetRequiredService<User>();
-            var hermes = _serviceProvider.GetRequiredService<HermesApiClient>();
-            var seven = _serviceProvider.GetRequiredService<SevenApiClient>();
+            if (string.IsNullOrWhiteSpace(_configuration.Hermes.Token)) {
+                _logger.Error("Hermes API token not set in the configuration file.");
+                return;
+            }
 
-            var hermesVersion = await hermes.GetTTSVersion();
+            var hermesVersion = await _hermesApiClient.GetTTSVersion();
             if (hermesVersion.MajorVersion > TTS.MAJOR_VERSION || hermesVersion.MajorVersion == TTS.MAJOR_VERSION && hermesVersion.MinorVersion > TTS.MINOR_VERSION)
             {
                 _logger.Information($"A new update for TTS is avaiable! Version {hermesVersion.MajorVersion}.{hermesVersion.MinorVersion} is available at {hermesVersion.Download}");
@@ -63,7 +71,7 @@ namespace TwitchChatTTS
 
             try
             {
-                await FetchUserData(user, hermes, seven);
+                await FetchUserData(_user, _hermesApiClient, _sevenApiClient);
             }
             catch (Exception ex)
             {
@@ -71,19 +79,15 @@ namespace TwitchChatTTS
                 await Task.Delay(30 * 1000);
             }
 
-            var twitchapiclient = await InitializeTwitchApiClient(user.TwitchUsername, user.TwitchUserId.ToString());
+            var twitchapiclient = await InitializeTwitchApiClient(_user.TwitchUsername, _user.TwitchUserId.ToString());
             if (twitchapiclient == null)
             {
                 await Task.Delay(30 * 1000);
                 return;
             }
 
-            var emoteSet = await seven.FetchChannelEmoteSet(user.TwitchUserId.ToString());
-            user.SevenEmoteSetId = emoteSet?.Id;
-
-            License.iConfirmCommercialUse("abcdef");
-
-            await InitializeEmotes(seven, emoteSet);
+            var emoteSet = await _sevenApiClient.FetchChannelEmoteSet(_user.TwitchUserId.ToString());
+            await InitializeEmotes(_sevenApiClient, emoteSet);
             await InitializeHermesWebsocket();
             await InitializeSevenTv(emoteSet.Id);
             await InitializeObs();
@@ -104,7 +108,7 @@ namespace TwitchChatTTS
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
-                            _logger.Warning("TTS Buffer - Cancellation token was canceled.");
+                            _logger.Warning("TTS Buffer -Cancellation requested.");
                             return;
                         }
 
@@ -144,7 +148,7 @@ namespace TwitchChatTTS
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
-                            _logger.Warning("TTS Queue - Cancellation token was canceled.");
+                            _logger.Warning("TTS Queue - Cancellation requested.");
                             return;
                         }
                         while (_player.IsEmpty() || _player.Playing != null)
@@ -160,12 +164,12 @@ namespace TwitchChatTTS
 
                         if (!string.IsNullOrWhiteSpace(m.File) && File.Exists(m.File))
                         {
-                            _logger.Information("Playing message: " + m.File);
+                            _logger.Debug("Playing audio file via TTS: " + m.File);
                             AudioPlaybackEngine.Instance.PlaySound(m.File);
                             continue;
                         }
 
-                        _logger.Information("Playing message: " + m.Message);
+                        _logger.Debug("Playing message via TTS: " + m.Message);
                         _player.Playing = m.Audio;
                         if (m.Audio != null)
                             AudioPlaybackEngine.Instance.AddMixerInput(m.Audio);
@@ -204,7 +208,7 @@ namespace TwitchChatTTS
             _logger.Information($"Username: {user.TwitchUsername} [id: {user.TwitchUserId}]");
 
             user.DefaultTTSVoice = await hermes.FetchTTSDefaultVoice();
-            _logger.Information("Default Voice: " + user.DefaultTTSVoice);
+            _logger.Information("TTS Default Voice: " + user.DefaultTTSVoice);
 
             var wordFilters = await hermes.FetchTTSWordFilters();
             user.RegexFilters = wordFilters.ToList();
@@ -232,12 +236,8 @@ namespace TwitchChatTTS
 
             var redemptionActions = await hermes.FetchRedeemableActions();
             var redemptions = await hermes.FetchRedemptions();
-            foreach (var action in redemptionActions)
-                _redemptionManager.AddAction(action);
-            foreach (var redemption in redemptions)
-                _redemptionManager.AddTwitchRedemption(redemption);
-            _redemptionManager.Ready();
-            _logger.Information($"Redemption Manager is ready with {redemptionActions.Count()} actions & {redemptions.Count()} redemptions.");
+            _redemptionManager.Initialize(redemptions, redemptionActions.ToDictionary(a => a.Name, a => a));
+            _logger.Information($"Redemption Manager has been initialized with {redemptionActions.Count()} actions & {redemptions.Count()} redemptions.");
         }
 
         private async Task InitializeHermesWebsocket()
@@ -252,7 +252,9 @@ namespace TwitchChatTTS
                 hermesClient.Connected = true;
                 await hermesClient.Send(1, new HermesLoginMessage()
                 {
-                    ApiKey = _configuration.Hermes.Token
+                    ApiKey = _configuration.Hermes.Token,
+                    MajorVersion = TTS.MAJOR_VERSION,
+                    MinorVersion = TTS.MINOR_VERSION,
                 });
             }
             catch (Exception)
@@ -346,10 +348,9 @@ namespace TwitchChatTTS
             return twitchapiclient;
         }
 
-        private async Task InitializeEmotes(SevenApiClient sevenapi, EmoteSet emoteSet)
+        private async Task InitializeEmotes(SevenApiClient sevenapi, EmoteSet channelEmotes)
         {
             var emotes = _serviceProvider.GetRequiredService<EmoteDatabase>();
-            var channelEmotes = emoteSet;
             var globalEmotes = await sevenapi.FetchGlobalSevenEmotes();
 
             if (channelEmotes != null && channelEmotes.Emotes.Any())

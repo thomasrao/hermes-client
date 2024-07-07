@@ -40,27 +40,45 @@ namespace TwitchChatTTS.Chat.Commands
             if (_user == null || _user.VoicesAvailable == null)
                 return;
 
-            var voiceName = args[0].ToLower();
-            var voiceId = _user.VoicesAvailable.FirstOrDefault(v => v.Value.ToLower() == voiceName).Key;
-            var action = args[1].ToLower();
+            var action = args[0].ToLower();
 
             switch (action)
             {
-                case "sleep":
-                    await _manager.Send(new RequestMessage("Sleep", string.Empty, new Dictionary<string, object>() { { "sleepMillis", 10000 } }));
-                    break;
                 case "get_scene_item_id":
-                    await _manager.Send(new RequestMessage("GetSceneItemId", string.Empty, new Dictionary<string, object>() { { "sceneName", "Generic" }, { "sourceName", "ABCDEF" }, { "rotation", 90 } }));
+                    if (args.Count < 3)
+                        return;
+
+                    _logger.Debug($"Getting scene item id via chat command [args: {string.Join(" ", args)}]");
+                    await _manager.Send(new RequestMessage("GetSceneItemId", string.Empty, new Dictionary<string, object>() { { "sceneName", args[1] }, { "sourceName", args[2] } }));
                     break;
                 case "transform":
+                    if (args.Count < 5)
+                        return;
+
+                    _logger.Debug($"Getting scene item transformation data via chat command [args: {string.Join(" ", args)}]");
                     await _manager.UpdateTransformation(args[1], args[2], (d) =>
                     {
-
+                        if (args[3].ToLower() == "rotation")
+                            d.Rotation = int.Parse(args[4]);
+                        else if (args[3].ToLower() == "x")
+                            d.Rotation = int.Parse(args[4]);
+                        else if (args[3].ToLower() == "y")
+                            d.PositionY = int.Parse(args[4]);
                     });
-                    await _manager.Send(new RequestMessage("Transform", string.Empty, new Dictionary<string, object>() { { "sceneName", "Generic" }, { "sceneItemId", 90 }, { "rotation", 90 } }));
                     break;
-                case "remove":
-                    await _manager.Send(new RequestMessage("Sleep", string.Empty, new Dictionary<string, object>() { { "sleepMillis", 10000 } }));
+                case "sleep":
+                    if (args.Count < 2)
+                        return;
+
+                    _logger.Debug($"Sending OBS to sleep via chat command [args: {string.Join(" ", args)}]");
+                    await _manager.Send(new RequestMessage("Sleep", string.Empty, new Dictionary<string, object>() { { "sleepMillis", int.Parse(args[1]) } }));
+                    break;
+                case "visibility":
+                    if (args.Count < 4)
+                        return;
+                        
+                    _logger.Debug($"Updating scene item visibility via chat command [args: {string.Join(" ", args)}]");
+                    await _manager.UpdateSceneItemVisibility(args[1], args[2], args[3].ToLower() == "true");
                     break;
                 default:
                     break;

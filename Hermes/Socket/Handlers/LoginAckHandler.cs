@@ -29,12 +29,15 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             if (message.AnotherClient)
             {
                 _logger.Warning("Another client has connected to the same account.");
+                return;
             }
             else
             {
                 client.UserId = message.UserId;
                 _logger.Information($"Logged in as {_user.TwitchUsername}.");
             }
+
+            _user.OwnerId = message.OwnerId;
 
             await client.Send(3, new RequestMessage()
             {

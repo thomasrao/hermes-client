@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchLib.Client.Models;
@@ -8,14 +9,16 @@ namespace TwitchChatTTS.Chat.Commands
     {
         private IDictionary<string, ChatCommand> _commands;
         private readonly TwitchBotAuth _token;
+        private readonly User _user;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger _logger;
         private string CommandStartSign { get; } = "!";
 
 
-        public ChatCommandManager(TwitchBotAuth token, IServiceProvider serviceProvider, ILogger logger)
+        public ChatCommandManager(TwitchBotAuth token, User user, IServiceProvider serviceProvider, ILogger logger)
         {
             _token = token;
+            _user = user;
             _serviceProvider = serviceProvider;
             _logger = logger;
 
@@ -65,7 +68,11 @@ namespace TwitchChatTTS.Chat.Commands
             if (!arg.StartsWith(CommandStartSign))
                 return ChatCommandResult.Unknown;
 
-            string[] parts = arg.Split(" ");
+            string[] parts = Regex.Matches(arg, "(?<match>[^\"\\n\\s]+|\"[^\"\\n]*\")")
+                .Cast<Match>()
+                .Select(m => m.Groups["match"].Value)
+                .Select(m => m.StartsWith('"') && m.EndsWith('"') ? m.Substring(1, m.Length - 2) : m)
+                .ToArray();
             string com = parts.First().Substring(CommandStartSign.Length).ToLower();
             string[] args = parts.Skip(1).ToArray();
             long broadcasterId = long.Parse(_token.BroadcasterId);
@@ -77,7 +84,7 @@ namespace TwitchChatTTS.Chat.Commands
                 return ChatCommandResult.Missing;
             }
 
-            if (!await command.CheckPermissions(message, broadcasterId) && message.UserId != "126224566" && !message.IsStaff)
+            if (!await command.CheckPermissions(message, broadcasterId) && message.UserId != _user.OwnerId?.ToString() && !message.IsStaff)
             {
                 _logger.Warning($"Chatter is missing permission to execute command named '{com}' [args: {arg}][chatter: {message.Username}][cid: {message.UserId}]");
                 return ChatCommandResult.Permission;
@@ -108,7 +115,7 @@ namespace TwitchChatTTS.Chat.Commands
                 return ChatCommandResult.Fail;
             }
 
-            _logger.Information($"Executed the {com} command with the following args: " + string.Join(" ", args));
+            _logger.Information($"Executed the {com} command [arguments: {arg}]");
             return ChatCommandResult.Success;
         }
     }

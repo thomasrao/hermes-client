@@ -23,12 +23,12 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             if (data is not RequestResponseMessage message || message == null)
                 return;
 
-            _logger.Debug($"Received an OBS request response [response id: {message.RequestId}]");
+            _logger.Debug($"Received an OBS request response [obs request id: {message.RequestId}]");
 
             var requestData = _manager.Take(message.RequestId);
             if (requestData == null)
             {
-                _logger.Warning($"OBS Request Response not being processed: request not stored [response id: {message.RequestId}]");
+                _logger.Warning($"OBS Request Response not being processed: request not stored [obs request id: {message.RequestId}]");
                 return;
             }
 
@@ -44,53 +44,148 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                         if (sender is not OBSSocketClient client)
                             return;
 
-                        if (message.RequestId == "stream")
-                        {
-                            client.Live = message.ResponseData["outputActive"].ToString() == "True";
-                            _logger.Warning($"Updated stream's live status to {client.Live} [response id: {message.RequestId}]");
-                        }
+                        _logger.Debug($"Fetched stream's live status [live: {client.Live}][obs request id: {message.RequestId}]");
                         break;
                     case "GetSceneItemId":
-                        if (!request.RequestData.TryGetValue("sceneName", out object sceneName))
                         {
-                            _logger.Warning($"Failed to find the scene name that was requested [response id: {message.RequestId}]");
-                            return;
-                        }
-                        if (!request.RequestData.TryGetValue("sourceName", out object sourceName))
-                        {
-                            _logger.Warning($"Failed to find the scene item name that was requested [scene: {sceneName}][response id: {message.RequestId}]");
-                            return;
-                        }
-                        if (!message.ResponseData.TryGetValue("sceneItemId", out object sceneItemId)) {
-                            _logger.Warning($"Failed to fetch the scene item id [scene: {sceneName}][scene item: {sourceName}][response id: {message.RequestId}]");
-                            return;
-                        }
+                            if (!request.RequestData.TryGetValue("sceneName", out object? sceneName) || sceneName == null)
+                            {
+                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!request.RequestData.TryGetValue("sourceName", out object? sourceName) || sourceName == null)
+                            {
+                                _logger.Warning($"Failed to find the scene item name that was requested [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (message.ResponseData == null)
+                            {
+                                _logger.Warning($"OBS Response is null [scene: {sceneName}][scene item: {sourceName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!message.ResponseData.TryGetValue("sceneItemId", out object? sceneItemId) || sceneItemId == null)
+                            {
+                                _logger.Warning($"Failed to fetch the scene item id [scene: {sceneName}][scene item: {sourceName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
 
-                        _logger.Information($"Added scene item id [scene: {sceneName}][source: {sourceName}][id: {sceneItemId}][response id: {message.RequestId}].");
-                        _manager.AddSourceId(sceneName.ToString(), sourceName.ToString(), long.Parse(sceneItemId.ToString()));
+                            _logger.Debug($"Found the scene item by name [scene: {sceneName}][source: {sourceName}][id: {sceneItemId}][obs request id: {message.RequestId}].");
+                            //_manager.AddSourceId(sceneName.ToString(), sourceName.ToString(), (long) sceneItemId);
 
-                        requestData.ResponseValues = new Dictionary<string, object>
-                        {
-                            { "sceneItemId", sceneItemId }
-                        };
-                        break;
+                            requestData.ResponseValues = new Dictionary<string, object>
+                            {
+                                { "sceneItemId", sceneItemId }
+                            };
+                            break;
+                        }
                     case "GetSceneItemTransform":
-                        if (!message.ResponseData.TryGetValue("sceneItemTransform", out object? transformData))
                         {
-                            _logger.Warning($"Failed to find the OBS scene item [response id: {message.RequestId}]");
-                            return;
-                        }
+                            if (!request.RequestData.TryGetValue("sceneName", out object? sceneName) || sceneName == null)
+                            {
+                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!request.RequestData.TryGetValue("sceneItemId", out object? sceneItemId) || sceneItemId == null)
+                            {
+                                _logger.Warning($"Failed to find the scene item name that was requested [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (message.ResponseData == null)
+                            {
+                                _logger.Warning($"OBS Response is null [scene: {sceneName}][scene item id: {sceneItemId}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!message.ResponseData.TryGetValue("sceneItemTransform", out object? transformData) || transformData == null)
+                            {
+                                _logger.Warning($"Failed to fetch the OBS transformation data [obs request id: {message.RequestId}]");
+                                return;
+                            }
 
-                        _logger.Verbose("Fetching OBS transformation data: " + transformData?.ToString());
-                        requestData.ResponseValues = new Dictionary<string, object>
+                            _logger.Debug($"Fetched OBS transformation data [scene: {sceneName}][scene item id: {sceneItemId}][transformation: {transformData}][obs request id: {message.RequestId}]");
+                            requestData.ResponseValues = new Dictionary<string, object>
+                            {
+                                { "sceneItemTransform", transformData }
+                            };
+                            break;
+                        }
+                    case "GetSceneItemEnabled":
                         {
-                            { "sceneItemTransform", transformData }
-                        };
-                        break;
+                            if (!request.RequestData.TryGetValue("sceneName", out object? sceneName) || sceneName == null)
+                            {
+                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!request.RequestData.TryGetValue("sceneItemId", out object? sceneItemId) || sceneItemId == null)
+                            {
+                                _logger.Warning($"Failed to find the scene item name that was requested [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (message.ResponseData == null)
+                            {
+                                _logger.Warning($"OBS Response is null [scene: {sceneName}][scene item id: {sceneItemId}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!message.ResponseData.TryGetValue("sceneItemEnabled", out object? sceneItemVisibility) || sceneItemVisibility == null)
+                            {
+                                _logger.Warning($"Failed to fetch the scene item visibility [scene: {sceneName}][scene item id: {sceneItemId}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+
+                            _logger.Debug($"Fetched OBS scene item visibility [scene: {sceneName}][scene item id: {sceneItemId}][visibility: {sceneItemVisibility}][obs request id: {message.RequestId}]");
+                            requestData.ResponseValues = new Dictionary<string, object>
+                            {
+                                { "sceneItemEnabled", sceneItemVisibility }
+                            };
+                            break;
+                        }
+                    case "SetSceneItemTransform":
+                        {
+                            if (!request.RequestData.TryGetValue("sceneName", out object? sceneName) || sceneName == null)
+                            {
+                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!request.RequestData.TryGetValue("sceneItemId", out object? sceneItemId) || sceneItemId == null)
+                            {
+                                _logger.Warning($"Failed to find the scene item name that was requested [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            _logger.Debug($"Received response from OBS for updating scene item transformation [scene: {sceneName}][scene item id: {sceneItemId}][obs request id: {message.RequestId}]");
+                            break;
+                        }
+                    case "SetSceneItemEnabled":
+                        {
+                            if (!request.RequestData.TryGetValue("sceneName", out object? sceneName) || sceneName == null)
+                            {
+                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!request.RequestData.TryGetValue("sceneItemId", out object? sceneItemId) || sceneItemId == null)
+                            {
+                                _logger.Warning($"Failed to find the scene item name that was requested [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            _logger.Debug($"Received response from OBS for updating scene item visibility [scene: {sceneName}][scene item id: {sceneItemId}][obs request id: {message.RequestId}]");
+                            break;
+                        }
+                    case "Sleep":
+                        {
+                            if (!request.RequestData.TryGetValue("sleepMillis", out object? sleepMillis) || sleepMillis == null)
+                            {
+                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            _logger.Debug($"Received response from OBS for sleeping [sleep: {sleepMillis}][obs request id: {message.RequestId}]");
+                            break;
+                        }
                     default:
-                        _logger.Warning($"OBS Request Response not being processed [type: {request.RequestType}][{string.Join(Environment.NewLine, message.ResponseData?.Select(kvp => kvp.Key + " = " + kvp.Value?.ToString()) ?? new string[0])}]");
+                        _logger.Warning($"OBS Request Response not being processed [type: {request.RequestType}][{string.Join(Environment.NewLine, message.ResponseData?.Select(kvp => kvp.Key + " = " + kvp.Value?.ToString()) ?? [])}]");
                         break;
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to process the response from OBS for a request [type: {request.RequestType}]");
             }
             finally
             {

@@ -100,7 +100,12 @@ namespace TwitchChatTTS.Hermes.Socket
                     LastHeartbeatReceived = DateTime.UtcNow;
 
                     if (_configuration.Hermes?.Token != null)
-                        await Send(1, new HermesLoginMessage() { ApiKey = _configuration.Hermes.Token });
+                        await Send(1, new HermesLoginMessage()
+                        {
+                            ApiKey = _configuration.Hermes.Token,
+                            MajorVersion = TTS.MAJOR_VERSION,
+                            MinorVersion = TTS.MINOR_VERSION,
+                        });
                 }
             }
         }

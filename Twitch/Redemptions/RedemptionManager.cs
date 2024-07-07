@@ -1,4 +1,7 @@
 using System.Reflection;
+using CommonSocketLibrary.Abstract;
+using CommonSocketLibrary.Common;
+using Microsoft.Extensions.DependencyInjection;
 using org.mariuszgromada.math.mxparser;
 using Serilog;
 using TwitchChatTTS.OBS.Socket.Data;
@@ -8,43 +11,40 @@ namespace TwitchChatTTS.Twitch.Redemptions
 {
     public class RedemptionManager
     {
-        private readonly IList<Redemption> _redemptions;
-        private readonly IDictionary<string, RedeemableAction> _actions;
         private readonly IDictionary<string, IList<RedeemableAction>> _store;
+        private readonly User _user;
         private readonly OBSManager _obsManager;
+        private readonly SocketClient<WebSocketMessage> _hermesClient;
         private readonly ILogger _logger;
+        private readonly Random _random;
         private bool _isReady;
 
 
-        public RedemptionManager(OBSManager obsManager, ILogger logger)
+        public RedemptionManager(
+            User user,
+            OBSManager obsManager,
+            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermesClient,
+            ILogger logger)
         {
-            _redemptions = new List<Redemption>();
-            _actions = new Dictionary<string, RedeemableAction>();
             _store = new Dictionary<string, IList<RedeemableAction>>();
+            _user = user;
             _obsManager = obsManager;
+            _hermesClient = hermesClient;
             _logger = logger;
+            _random = new Random();
             _isReady = false;
-        }
-
-        public void AddTwitchRedemption(Redemption redemption)
-        {
-            _redemptions.Add(redemption);
-        }
-
-        public void AddAction(RedeemableAction action)
-        {
-            _actions.Add(action.Name, action);
         }
 
         private void Add(string twitchRedemptionId, RedeemableAction action)
         {
             if (!_store.TryGetValue(twitchRedemptionId, out var actions))
                 _store.Add(twitchRedemptionId, actions = new List<RedeemableAction>());
+
             actions.Add(action);
-            _store[twitchRedemptionId] = actions.OrderBy(a => a).ToList();
+            _logger.Debug($"Added redemption action [name: {action.Name}][type: {action.Type}]");
         }
 
-        public async Task Execute(RedeemableAction action, string sender)
+        public async Task Execute(RedeemableAction action, string senderDisplayName, long senderId)
         {
             try
             {
@@ -52,12 +52,12 @@ namespace TwitchChatTTS.Twitch.Redemptions
                 {
                     case "WRITE_TO_FILE":
                         Directory.CreateDirectory(Path.GetDirectoryName(action.Data["file_path"]));
-                        await File.WriteAllTextAsync(action.Data["file_path"], ReplaceContentText(action.Data["file_content"], sender));
+                        await File.WriteAllTextAsync(action.Data["file_path"], ReplaceContentText(action.Data["file_content"], senderDisplayName));
                         _logger.Debug($"Overwritten text to file [file: {action.Data["file_path"]}]");
                         break;
                     case "APPEND_TO_FILE":
                         Directory.CreateDirectory(Path.GetDirectoryName(action.Data["file_path"]));
-                        await File.AppendAllTextAsync(action.Data["file_path"], ReplaceContentText(action.Data["file_content"], sender));
+                        await File.AppendAllTextAsync(action.Data["file_path"], ReplaceContentText(action.Data["file_content"], senderDisplayName));
                         _logger.Debug($"Appended text to file [file: {action.Data["file_path"]}]");
                         break;
                     case "OBS_TRANSFORM":
@@ -99,8 +99,63 @@ namespace TwitchChatTTS.Twitch.Redemptions
                             _logger.Debug($"Finished applying the OBS transformation property changes [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}]");
                         });
                         break;
+                    case "TOGGLE_OBS_VISIBILITY":
+                        await _obsManager.ToggleSceneItemVisibility(action.Data["scene_name"], action.Data["scene_item_name"]);
+                        break;
+                    case "SPECIFIC_OBS_VISIBILITY":
+                        await _obsManager.UpdateSceneItemVisibility(action.Data["scene_name"], action.Data["scene_item_name"], action.Data["obs_visible"].ToLower() == "true");
+                        break;
+                    case "SPECIFIC_OBS_INDEX":
+                        await _obsManager.UpdateSceneItemIndex(action.Data["scene_name"], action.Data["scene_item_name"], int.Parse(action.Data["obs_index"]));
+                        break;
+                    case "SLEEP":
+                        _logger.Debug("Sleeping on thread due to redemption for OBS.");
+                        await Task.Delay(int.Parse(action.Data["sleep"]));
+                        break;
+                    case "SPECIFIC_TTS_VOICE":
+                        var voiceId = _user.VoicesAvailable.Keys.First(id => _user.VoicesAvailable[id].ToLower() == action.Data["tts_voice"].ToLower());
+                        if (voiceId == null)
+                        {
+                            _logger.Warning($"Voice specified is not valid [voice: {action.Data["tts_voice"]}]");
+                            return;
+                        }
+                        var voiceName = _user.VoicesAvailable[voiceId];
+                        if (!_user.VoicesEnabled.Contains(voiceName))
+                        {
+                            _logger.Warning($"Voice specified is not enabled [voice: {action.Data["tts_voice"]}][voice id: {voiceId}]");
+                            return;
+                        }
+                        await _hermesClient.Send(3, new HermesSocketLibrary.Socket.Data.RequestMessage()
+                        {
+                            Type = _user.VoicesSelected.ContainsKey(senderId) ? "update_tts_user" : "create_tts_user",
+                            Data = new Dictionary<string, object>() { { "chatter", senderId }, { "voice", voiceId } }
+                        });
+                        _logger.Debug($"Changed the TTS voice of a chatter [voice: {action.Data["tts_voice"]}][display name: {senderDisplayName}][chatter id: {senderId}]");
+                        break;
+                    case "RANDOM_TTS_VOICE":
+                        var voicesEnabled = _user.VoicesEnabled.ToList();
+                        if (!voicesEnabled.Any())
+                        {
+                            _logger.Warning($"There are no TTS voices enabled [voice pool size: {voicesEnabled.Count}]");
+                            return;
+                        }
+                        if (voicesEnabled.Count <= 1)
+                        {
+                            _logger.Warning($"There are not enough TTS voices enabled to randomize [voice pool size: {voicesEnabled.Count}]");
+                            return;
+                        }
+                        var randomVoice = voicesEnabled[_random.Next(voicesEnabled.Count)];
+                        var randomVoiceId = _user.VoicesAvailable.Keys.First(id => _user.VoicesAvailable[id] == randomVoice);
+                        await _hermesClient.Send(3, new HermesSocketLibrary.Socket.Data.RequestMessage()
+                        {
+                            Type = _user.VoicesSelected.ContainsKey(senderId) ? "update_tts_user" : "create_tts_user",
+                            Data = new Dictionary<string, object>() { { "chatter", senderId }, { "voice", randomVoiceId } }
+                        });
+                        _logger.Debug($"Randomly changed the TTS voice of a chatter [voice: {randomVoice}][display name: {senderDisplayName}][chatter id: {senderId}]");
+                        break;
                     case "AUDIO_FILE":
-                        if (!File.Exists(action.Data["file_path"])) {
+                        if (!File.Exists(action.Data["file_path"]))
+                        {
                             _logger.Warning($"Cannot find audio file for Twitch channel point redeem [file: {action.Data["file_path"]}]");
                             return;
                         }
@@ -108,7 +163,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
                         _logger.Debug($"Played an audio file for channel point redeem [file: {action.Data["file_path"]}]");
                         break;
                     default:
-                        _logger.Warning($"Unknown redeemable action has occured [type: {action.Type}]");
+                        _logger.Warning($"Unknown redeemable action has occured. Update needed? [type: {action.Type}]");
                         break;
                 }
             }
@@ -128,21 +183,37 @@ namespace TwitchChatTTS.Twitch.Redemptions
             return new List<RedeemableAction>(0);
         }
 
-        public void Ready()
+        public void Initialize(IEnumerable<Redemption> redemptions, IDictionary<string, RedeemableAction> actions)
         {
-            var ordered = _redemptions.OrderBy(r => r.Order);
             _store.Clear();
 
+            var ordered = redemptions.OrderBy(r => r.Order);
             foreach (var redemption in ordered)
-                if (_actions.TryGetValue(redemption.ActionName, out var action) && action != null)
-                    Add(redemption.RedemptionId, action);
-            
+            {
+                try
+                {
+                    if (actions.TryGetValue(redemption.ActionName, out var action) && action != null)
+                    {
+                        _logger.Debug($"Fetched a redemption action [redemption id: {redemption.Id}][redemption action: {redemption.ActionName}][order: {redemption.Order}]");
+                        Add(redemption.RedemptionId, action);
+                    }
+                    else
+                        _logger.Warning($"Could not find redemption action [redemption id: {redemption.Id}][redemption action: {redemption.ActionName}][order: {redemption.Order}]");
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(e, $"Failed to add a redemption [redemption id: {redemption.Id}][redemption action: {redemption.ActionName}][order: {redemption.Order}]");
+                }
+            }
+
             _isReady = true;
-            _logger.Debug("Redemption Manager is ready.");
+            _logger.Debug("All redemptions added. Redemption Manager is ready.");
         }
 
-        private string ReplaceContentText(string content, string username) {
-            return content.Replace("%USER%", username);
+        private string ReplaceContentText(string content, string username)
+        {
+            return content.Replace("%USER%", username)
+                .Replace("\\n", "\n");
         }
     }
 }

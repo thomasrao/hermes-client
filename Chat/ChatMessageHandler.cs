@@ -186,7 +186,10 @@ public class ChatMessageHandler
             var voiceId = _user.VoicesSelected[userId];
             if (_user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) && voiceName != null)
             {
-                voiceSelected = voiceName;
+                if (_user.VoicesEnabled.Contains(voiceName) || chatterId == _user.OwnerId || m.IsStaff)
+                {
+                    voiceSelected = voiceName;
+                }
             }
         }
 
@@ -219,9 +222,7 @@ public class ChatMessageHandler
     private void HandlePartialMessage(int priority, string voice, string message, OnMessageReceivedArgs e)
     {
         if (string.IsNullOrWhiteSpace(message))
-        {
             return;
-        }
 
         var m = e.ChatMessage;
         var parts = sfxRegex.Split(message);

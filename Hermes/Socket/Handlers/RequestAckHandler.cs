@@ -12,6 +12,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 {
     public class RequestAckHandler : IWebSocketHandler
     {
+        private User _user;
         private readonly IServiceProvider _serviceProvider;
         private readonly JsonSerializerOptions _options;
         private readonly ILogger _logger;
@@ -20,8 +21,9 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
         public int OperationCode { get; } = 4;
 
-        public RequestAckHandler(IServiceProvider serviceProvider, JsonSerializerOptions options, ILogger logger)
+        public RequestAckHandler(User user, IServiceProvider serviceProvider, JsonSerializerOptions options, ILogger logger)
         {
+            _user = user;
             _serviceProvider = serviceProvider;
             _options = options;
             _logger = logger;
@@ -33,8 +35,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 return;
             if (message.Request == null)
                 return;
-            var context = _serviceProvider.GetRequiredService<User>();
-            if (context == null)
+            if (_user == null)
                 return;
 
             if (message.Request.Type == "get_tts_voices")
@@ -46,7 +47,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
                 lock (_voicesAvailableLock)
                 {
-                    context.VoicesAvailable = voices.ToDictionary(e => e.Id, e => e.Name);
+                    _user.VoicesAvailable = voices.ToDictionary(e => e.Id, e => e.Name);
                 }
                 _logger.Information("Updated all available voices for TTS.");
             }
@@ -54,22 +55,28 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             {
                 _logger.Verbose("Adding new tts voice for user.");
                 if (!long.TryParse(message.Request.Data["user"].ToString(), out long chatterId))
+                {
+                    _logger.Warning($"Failed to parse chatter id [chatter id: {message.Request.Data["chatter"]}]");
                     return;
+                }
                 string userId = message.Request.Data["user"].ToString();
                 string voice = message.Request.Data["voice"].ToString();
 
-                context.VoicesSelected.Add(chatterId, voice);
+                _user.VoicesSelected.Add(chatterId, voice);
                 _logger.Information($"Added new TTS voice [voice: {voice}] for user [user id: {userId}]");
             }
             else if (message.Request.Type == "update_tts_user")
             {
                 _logger.Verbose("Updating user's voice");
                 if (!long.TryParse(message.Request.Data["chatter"].ToString(), out long chatterId))
+                {
+                    _logger.Warning($"Failed to parse chatter id [chatter id: {message.Request.Data["chatter"]}]");
                     return;
+                }
                 string userId = message.Request.Data["user"].ToString();
                 string voice = message.Request.Data["voice"].ToString();
 
-                context.VoicesSelected[chatterId] = voice;
+                _user.VoicesSelected[chatterId] = voice;
                 _logger.Information($"Updated TTS voice [voice: {voice}] for user [user id: {userId}]");
             }
             else if (message.Request.Type == "create_tts_voice")
@@ -82,9 +89,9 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
                 lock (_voicesAvailableLock)
                 {
-                    var list = context.VoicesAvailable.ToDictionary(k => k.Key, v => v.Value);
+                    var list = _user.VoicesAvailable.ToDictionary(k => k.Key, v => v.Value);
                     list.Add(voiceId, voice);
-                    context.VoicesAvailable = list;
+                    _user.VoicesAvailable = list;
                 }
                 _logger.Information($"Created new tts voice [voice: {voice}][id: {voiceId}].");
             }
@@ -92,14 +99,14 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             {
                 _logger.Verbose("Deleting tts voice.");
                 var voice = message.Request.Data["voice"].ToString();
-                if (!context.VoicesAvailable.TryGetValue(voice, out string voiceName) || voiceName == null)
+                if (!_user.VoicesAvailable.TryGetValue(voice, out string voiceName) || voiceName == null)
                     return;
 
                 lock (_voicesAvailableLock)
                 {
-                    var dict = context.VoicesAvailable.ToDictionary(k => k.Key, v => v.Value);
+                    var dict = _user.VoicesAvailable.ToDictionary(k => k.Key, v => v.Value);
                     dict.Remove(voice);
-                    context.VoicesAvailable.Remove(voice);
+                    _user.VoicesAvailable.Remove(voice);
                 }
                 _logger.Information($"Deleted a voice [voice: {voiceName}]");
             }
@@ -109,10 +116,10 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 string voiceId = message.Request.Data["idd"].ToString();
                 string voice = message.Request.Data["voice"].ToString();
 
-                if (!context.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
+                if (!_user.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
                     return;
 
-                context.VoicesAvailable[voiceId] = voice;
+                _user.VoicesAvailable[voiceId] = voice;
                 _logger.Information($"Updated TTS voice [voice: {voice}][id: {voiceId}]");
             }
             else if (message.Request.Type == "get_tts_users")
@@ -125,7 +132,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 var temp = new ConcurrentDictionary<long, string>();
                 foreach (var entry in users)
                     temp.TryAdd(entry.Key, entry.Value);
-                context.VoicesSelected = temp;
+                _user.VoicesSelected = temp;
                 _logger.Information($"Updated {temp.Count()} chatters' selected voice.");
             }
             else if (message.Request.Type == "get_chatter_ids")
@@ -162,18 +169,18 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             {
                 _logger.Verbose("Updating TTS voice states.");
                 string voiceId = message.Request.Data["voice"].ToString();
-                bool state = message.Request.Data["state"].ToString() == "true";
+                bool state = message.Request.Data["state"].ToString().ToLower() == "true";
 
-                if (!context.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
+                if (!_user.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
                 {
-                    _logger.Warning($"Failed to find voice [id: {voiceId}]");
+                    _logger.Warning($"Failed to find voice by id [id: {voiceId}]");
                     return;
                 }
 
                 if (state)
-                    context.VoicesEnabled.Add(voiceId);
+                    _user.VoicesEnabled.Add(voiceId);
                 else
-                    context.VoicesEnabled.Remove(voiceId);
+                    _user.VoicesEnabled.Remove(voiceId);
                 _logger.Information($"Updated voice state [voice: {voiceName}][new state: {(state ? "enabled" : "disabled")}]");
             }
         }
