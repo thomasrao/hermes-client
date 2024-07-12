@@ -18,7 +18,7 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
         public int OperationCode { get; } = 7;
 
 
-        public EndOfStreamHandler(ILogger logger, User user, IServiceProvider serviceProvider)
+        public EndOfStreamHandler(User user, IServiceProvider serviceProvider, ILogger logger)
         {
             _logger = logger;
             _user = user;
@@ -76,7 +76,10 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
             }
 
             if (string.IsNullOrWhiteSpace(_user.SevenEmoteSetId))
+            {
+                _logger.Warning("Connected to 7tv websocket previously, but no emote set id was set.");
                 return;
+            }
 
             var context = _serviceProvider.GetRequiredService<ReconnectContext>();
             if (_reconnectDelay[code] > 0)
@@ -90,11 +93,11 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
             if (context.SessionId != null)
             {
                 await sender.Send(34, new ResumeMessage() { SessionId = context.SessionId });
-                _logger.Information("Resumed connection to 7tv websocket.");
+                _logger.Debug("Resumed connection to 7tv websocket.");
             }
             else
             {
-                _logger.Information("Resumed connection to 7tv websocket on a different session.");
+                _logger.Debug("Resumed connection to 7tv websocket on a different session.");
             }
         }
     }

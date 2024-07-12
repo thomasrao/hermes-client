@@ -30,7 +30,7 @@ namespace TwitchChatTTS.Chat.Commands
             AddParameter(unvalidatedParameter);
         }
 
-        public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
         {
             return message.IsModerator || message.IsBroadcaster;
         }

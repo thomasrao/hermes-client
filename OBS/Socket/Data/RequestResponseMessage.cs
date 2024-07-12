@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace TwitchChatTTS.OBS.Socket.Data
 {
     public class RequestResponseMessage

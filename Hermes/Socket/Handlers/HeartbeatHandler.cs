@@ -21,11 +21,9 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 return;
 
             if (sender is not HermesSocketClient client)
-            {
                 return;
-            }
 
-            _logger.Verbose("Received heartbeat.");
+            _logger.Verbose("Received heartbeat from server.");
 
             client.LastHeartbeatReceived = DateTime.UtcNow;
 

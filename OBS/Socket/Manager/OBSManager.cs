@@ -10,10 +10,10 @@ namespace TwitchChatTTS.OBS.Socket.Manager
 {
     public class OBSManager
     {
-        private IDictionary<string, RequestData> _requests;
-        private IDictionary<string, IDictionary<string, long>> _sourceIds;
-        private IServiceProvider _serviceProvider;
-        private ILogger _logger;
+        private readonly IDictionary<string, RequestData> _requests;
+        private readonly IDictionary<string, long> _sourceIds;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly ILogger _logger;
 
         public OBSManager(IServiceProvider serviceProvider, ILogger logger)
         {
@@ -21,41 +21,41 @@ namespace TwitchChatTTS.OBS.Socket.Manager
             _logger = logger;
 
             _requests = new ConcurrentDictionary<string, RequestData>();
-            _sourceIds = new Dictionary<string, IDictionary<string, long>>();
+            _sourceIds = new Dictionary<string, long>();
         }
 
 
-        public void AddSourceId(string sceneName, string sourceName, long sourceId)
+        public void AddSourceId(string sourceName, long sourceId)
         {
-            if (!_sourceIds.TryGetValue(sceneName, out var scene))
-            {
-                scene = new Dictionary<string, long>();
-                _sourceIds.Add(sceneName, scene);
-            }
-
-            if (scene.ContainsKey(sourceName))
-                scene[sourceName] = sourceId;
+            if (!_sourceIds.TryGetValue(sourceName, out _))
+                _sourceIds.Add(sourceName, sourceId);
             else
-                scene.Add(sourceName, sourceId);
+                _sourceIds[sourceName] = sourceId;
+            _logger.Debug($"Added OBS scene item to cache [scene item: {sourceName}][scene item id: {sourceId}]");
+        }
 
+        public void ClearCache()
+        {
+            _sourceIds.Clear();
         }
 
         public async Task Send(IEnumerable<RequestMessage> messages)
         {
             string uid = GenerateUniqueIdentifier();
-            _logger.Debug($"Sending OBS request batch of {messages.Count()} messages [obs request id: {uid}].");
+            var list = messages.ToList();
+            _logger.Debug($"Sending OBS request batch of {list.Count} messages [obs request batch id: {uid}].");
 
             // Keep track of requests to know what we requested.
-            foreach (var message in messages)
+            foreach (var message in list)
             {
                 message.RequestId = GenerateUniqueIdentifier();
                 var data = new RequestData(message, uid);
                 _requests.Add(message.RequestId, data);
             }
-            _logger.Debug($"Generated uid for all OBS request messages in batch [obs request id: {uid}][obs request ids: {string.Join(", ", messages.Select(m => m.RequestType + "=" + m.RequestId))}]");
+            _logger.Debug($"Generated uid for all OBS request messages in batch [obs request batch id: {uid}][obs request ids: {string.Join(", ", list.Select(m => m.RequestType + "=" + m.RequestId))}]");
 
             var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs");
-            await client.Send(8, new RequestBatchMessage(uid, messages));
+            await client.Send(8, new RequestBatchMessage(uid, list));
         }
 
         public async Task Send(RequestMessage message, Action<Dictionary<string, object>>? callback = null)
@@ -121,7 +121,7 @@ namespace TwitchChatTTS.OBS.Socket.Manager
                             transform.BoundsAlignment = a = (int)OBSAlignment.Center;
                         else
                             transform.Alignment = a = (int)OBSAlignment.Center;
-                        
+
                         transform.PositionX = transform.PositionX + w / 2;
                         transform.PositionY = transform.PositionY + h / 2;
                     }
@@ -144,63 +144,99 @@ namespace TwitchChatTTS.OBS.Socket.Manager
 
                     var m3 = new RequestMessage("SetSceneItemTransform", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemTransform", transform } });
                     await Send(m3);
-                    _logger.Debug($"New transformation data [scene: {sceneName}][sceneItemName: {sceneItemName}][sceneItemId: {sceneItemId}][transform: {transformData}][obs request id: {m2.RequestId}]");
+                    _logger.Debug($"New transformation data [scene: {sceneName}][sceneItemName: {sceneItemName}][sceneItemId: {sceneItemId}][obs request id: {m3.RequestId}]");
                 });
             });
         }
 
         public async Task ToggleSceneItemVisibility(string sceneName, string sceneItemName)
         {
-            LogExceptions(async () =>
+            await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
             {
-                await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
+                var m1 = new RequestMessage("GetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId } });
+                await Send(m1, async (d) =>
                 {
-                    var m1 = new RequestMessage("GetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId } });
-                    await Send(m1, async (d) =>
-                    {
-                        if (d == null || !d.TryGetValue("sceneItemEnabled", out object? visible) || visible == null)
-                            return;
+                    if (d == null || !d.TryGetValue("sceneItemEnabled", out object? visible) || visible == null)
+                        return;
 
-                        var m2 = new RequestMessage("SetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemEnabled", visible.ToString().ToLower() == "true" ? false : true } });
-                        await Send(m2);
-                    });
+                    var m2 = new RequestMessage("SetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemEnabled", visible.ToString().ToLower() == "true" ? false : true } });
+                    await Send(m2);
                 });
-            }, "Failed to toggle OBS scene item visibility.");
+            });
         }
 
         public async Task UpdateSceneItemVisibility(string sceneName, string sceneItemName, bool isVisible)
         {
-            LogExceptions(async () =>
+            await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
             {
-                await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
-                {
-                    var m = new RequestMessage("SetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemEnabled", isVisible } });
-                    await Send(m);
-                });
-            }, "Failed to update OBS scene item visibility.");
+                var m = new RequestMessage("SetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemEnabled", isVisible } });
+                await Send(m);
+            });
         }
 
         public async Task UpdateSceneItemIndex(string sceneName, string sceneItemName, int index)
         {
-            LogExceptions(async () =>
+            await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
             {
-                await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
-                {
-                    var m = new RequestMessage("SetSceneItemIndex", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemIndex", index } });
-                    await Send(m);
-                });
-            }, "Failed to update OBS scene item index.");
+                var m = new RequestMessage("SetSceneItemIndex", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemIndex", index } });
+                await Send(m);
+            });
+        }
+
+        public async Task GetGroupList(Action<IEnumerable<string>>? action)
+        {
+            var m = new RequestMessage("GetGroupList", string.Empty, new Dictionary<string, object>());
+            await Send(m, (d) =>
+            {
+                if (d == null || !d.TryGetValue("groups", out object? value) || value == null)
+                    return;
+
+                var list = (IEnumerable<string>)value;
+                _logger.Debug("Fetched the list of groups in OBS.");
+                if (list != null)
+                    action?.Invoke(list);
+            });
+        }
+
+        public async Task GetGroupSceneItemList(string groupName, Action<IEnumerable<OBSSceneItem>>? action)
+        {
+            var m = new RequestMessage("GetGroupSceneItemList", string.Empty, new Dictionary<string, object>() { { "sceneName", groupName } });
+            await Send(m, (d) =>
+            {
+                if (d == null || !d.TryGetValue("sceneItems", out object? value) || value == null)
+                    return;
+
+                var list = (IEnumerable<OBSSceneItem>)value;
+                _logger.Debug($"Fetched the list of OBS scene items in a group [group: {groupName}]");
+                if (list != null)
+                    action?.Invoke(list);
+            });
+        }
+
+        public async Task GetGroupSceneItemList(IEnumerable<string> groupNames)
+        {
+            var messages = groupNames.Select(group => new RequestMessage("GetGroupSceneItemList", string.Empty, new Dictionary<string, object>() { { "sceneName", group } }));
+            await Send(messages);
+            _logger.Debug($"Fetched the list of OBS scene items in all groups [groups: {string.Join(", ", groupNames)}]");
         }
 
         private async Task GetSceneItemById(string sceneName, string sceneItemName, Action<long> action)
         {
-            var m1 = new RequestMessage("GetSceneItemId", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sourceName", sceneItemName } });
-            await Send(m1, async (d) =>
+            if (_sourceIds.TryGetValue(sceneItemName, out long sourceId))
+            {
+                _logger.Debug($"Fetched scene item id from cache [scene: {sceneName}][scene item: {sceneItemName}][scene item id: {sourceId}]");
+                action.Invoke(sourceId);
+                return;
+            }
+
+            var m = new RequestMessage("GetSceneItemId", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sourceName", sceneItemName } });
+            await Send(m, async (d) =>
             {
                 if (d == null || !d.TryGetValue("sceneItemId", out object? value) || value == null || !long.TryParse(value.ToString(), out long sceneItemId))
                     return;
 
-                _logger.Debug($"Fetched scene item id from OBS [scene: {sceneName}][scene item: {sceneItemName}][scene item id: {sceneItemId}][obs request id: {m1.RequestId}]");
+                _logger.Debug($"Fetched scene item id from OBS [scene: {sceneName}][scene item: {sceneItemName}][scene item id: {sceneItemId}][obs request id: {m.RequestId}]");
+                AddSourceId(sceneItemName, sceneItemId);
                 action.Invoke(sceneItemId);
             });
         }

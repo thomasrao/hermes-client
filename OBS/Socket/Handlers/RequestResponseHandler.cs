@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Serilog;
@@ -72,10 +73,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                             _logger.Debug($"Found the scene item by name [scene: {sceneName}][source: {sourceName}][id: {sceneItemId}][obs request id: {message.RequestId}].");
                             //_manager.AddSourceId(sceneName.ToString(), sourceName.ToString(), (long) sceneItemId);
 
-                            requestData.ResponseValues = new Dictionary<string, object>
-                            {
-                                { "sceneItemId", sceneItemId }
-                            };
+                            requestData.ResponseValues = message.ResponseData;
                             break;
                         }
                     case "GetSceneItemTransform":
@@ -102,10 +100,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                             }
 
                             _logger.Debug($"Fetched OBS transformation data [scene: {sceneName}][scene item id: {sceneItemId}][transformation: {transformData}][obs request id: {message.RequestId}]");
-                            requestData.ResponseValues = new Dictionary<string, object>
-                            {
-                                { "sceneItemTransform", transformData }
-                            };
+                            requestData.ResponseValues = message.ResponseData;
                             break;
                         }
                     case "GetSceneItemEnabled":
@@ -132,10 +127,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                             }
 
                             _logger.Debug($"Fetched OBS scene item visibility [scene: {sceneName}][scene item id: {sceneItemId}][visibility: {sceneItemVisibility}][obs request id: {message.RequestId}]");
-                            requestData.ResponseValues = new Dictionary<string, object>
-                            {
-                                { "sceneItemEnabled", sceneItemVisibility }
-                            };
+                            requestData.ResponseValues = message.ResponseData;
                             break;
                         }
                     case "SetSceneItemTransform":
@@ -168,11 +160,68 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                             _logger.Debug($"Received response from OBS for updating scene item visibility [scene: {sceneName}][scene item id: {sceneItemId}][obs request id: {message.RequestId}]");
                             break;
                         }
+                    case "GetGroupList":
+                        {
+                            if (message.ResponseData == null)
+                            {
+                                _logger.Warning($"OBS Response is null [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!message.ResponseData.TryGetValue("groups", out object? value) || value == null)
+                            {
+                                _logger.Warning($"Failed to fetch the scene item visibility [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            var groups = JsonSerializer.Deserialize<IEnumerable<string>>(value.ToString());
+                            _logger.Debug($"Fetched OBS groups [obs request id: {message.RequestId}]");
+                            requestData.ResponseValues = new Dictionary<string, object>()
+                            {
+                                { "groups", groups }
+                            };
+                            break;
+                        }
+                    case "GetGroupSceneItemList":
+                        {
+                            if (!request.RequestData.TryGetValue("sceneName", out object? sceneName) || sceneName == null)
+                            {
+                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (message.ResponseData == null)
+                            {
+                                _logger.Warning($"OBS Response is null [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!message.ResponseData.TryGetValue("sceneItems", out object? value) || value == null)
+                            {
+                                _logger.Warning($"Failed to fetch the scene item visibility [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            _logger.Debug($"Fetched OBS scene items in group [scene: {sceneName}][obs request id: {message.RequestId}]");
+                            var sceneItems = JsonSerializer.Deserialize<IEnumerable<OBSSceneItem>>(value.ToString()!, new JsonSerializerOptions()
+                            {
+                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                            });
+                            if (sceneItems == null)
+                            {
+                                _logger.Warning($"Failed to deserialize the data received [scene: {sceneName}][obs request id: {message.RequestId}]");
+                                return;
+                            }
+
+                            foreach (var sceneItem in sceneItems)
+                                _manager.AddSourceId(sceneItem.SourceName, sceneItem.SceneItemId);
+
+                            requestData.ResponseValues = new Dictionary<string, object>()
+                            {
+                                { "groups", sceneItems }
+                            };
+                            break;
+                        }
                     case "Sleep":
                         {
                             if (!request.RequestData.TryGetValue("sleepMillis", out object? sleepMillis) || sleepMillis == null)
                             {
-                                _logger.Warning($"Failed to find the scene name that was requested [obs request id: {message.RequestId}]");
+                                _logger.Warning($"Failed to find the amount of time to sleep for [obs request id: {message.RequestId}]");
                                 return;
                             }
                             _logger.Debug($"Received response from OBS for sleeping [sleep: {sleepMillis}][obs request id: {message.RequestId}]");

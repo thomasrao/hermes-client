@@ -14,6 +14,8 @@ namespace TwitchChatTTS.Chat.Commands
         private readonly SocketClient<WebSocketMessage> _hermesClient;
         private ILogger _logger;
 
+        public new bool DefaultPermissionsOverwrite { get => true; }
+
         public RemoveTTSVoiceCommand(
             [FromKeyedServices("parameter-unvalidated")] ChatCommandParameter ttsVoiceParameter,
             User user,
@@ -28,7 +30,7 @@ namespace TwitchChatTTS.Chat.Commands
             AddParameter(ttsVoiceParameter);
         }
 
-        public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
         {
             return false;
         }

@@ -17,6 +17,8 @@ namespace TwitchChatTTS.Hermes.Socket
         private System.Timers.Timer _heartbeatTimer;
         private System.Timers.Timer _reconnectTimer;
 
+        public const string BASE_URL = "ws.tomtospeech.com";
+
         public HermesSocketClient(
             Configuration configuration,
             [FromKeyedServices("hermes")] HandlerManager<WebSocketClient, IWebSocketHandler> handlerManager,
@@ -84,7 +86,7 @@ namespace TwitchChatTTS.Hermes.Socket
         {
             try
             {
-                await ConnectAsync($"wss://hermes-ws.goblincaves.com");
+                await ConnectAsync($"wss://{HermesSocketClient.BASE_URL}");
                 Connected = true;
             }
             catch (Exception)

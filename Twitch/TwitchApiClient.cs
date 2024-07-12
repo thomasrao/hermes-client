@@ -65,7 +65,7 @@ public class TwitchApiClient
         try
         {
             _logger.Debug($"Attempting to authorize Twitch API [id: {broadcasterId}]");
-            var authorize = await _web.GetJson<TwitchBotAuth>("https://hermes.goblincaves.com/api/account/reauthorize");
+            var authorize = await _web.GetJson<TwitchBotAuth>($"https://{HermesApiClient.BASE_URL}/api/account/reauthorize");
             if (authorize != null && broadcasterId == authorize.BroadcasterId)
             {
                 _token.AccessToken = authorize.AccessToken;

@@ -11,18 +11,23 @@ using TwitchChatTTS.Seven;
 using TwitchLib.Client.Events;
 using TwitchChatTTS.Twitch.Redemptions;
 using org.mariuszgromada.math.mxparser;
+using TwitchChatTTS.Hermes.Socket;
+using TwitchChatTTS.Chat.Groups.Permissions;
+using TwitchChatTTS.Chat.Groups;
 
 namespace TwitchChatTTS
 {
     public class TTS : IHostedService
     {
         public const int MAJOR_VERSION = 3;
-        public const int MINOR_VERSION = 6;
+        public const int MINOR_VERSION = 8;
 
         private readonly User _user;
         private readonly HermesApiClient _hermesApiClient;
         private readonly SevenApiClient _sevenApiClient;
         private readonly RedemptionManager _redemptionManager;
+        private readonly IChatterGroupManager _chatterGroupManager;
+        private readonly IGroupPermissionManager _permissionManager;
         private readonly Configuration _configuration;
         private readonly TTSPlayer _player;
         private readonly IServiceProvider _serviceProvider;
@@ -33,6 +38,8 @@ namespace TwitchChatTTS
             HermesApiClient hermesApiClient,
             SevenApiClient sevenApiClient,
             RedemptionManager redemptionManager,
+            IChatterGroupManager chatterGroupManager,
+            IGroupPermissionManager permissionManager,
             Configuration configuration,
             TTSPlayer player,
             IServiceProvider serviceProvider,
@@ -43,6 +50,8 @@ namespace TwitchChatTTS
             _hermesApiClient = hermesApiClient;
             _sevenApiClient = sevenApiClient;
             _redemptionManager = redemptionManager;
+            _chatterGroupManager = chatterGroupManager;
+            _permissionManager = permissionManager;
             _configuration = configuration;
             _player = player;
             _serviceProvider = serviceProvider;
@@ -54,13 +63,18 @@ namespace TwitchChatTTS
             Console.Title = "TTS - Twitch Chat";
             License.iConfirmCommercialUse("abcdef");
 
-            if (string.IsNullOrWhiteSpace(_configuration.Hermes.Token)) {
+            if (string.IsNullOrWhiteSpace(_configuration.Hermes.Token))
+            {
                 _logger.Error("Hermes API token not set in the configuration file.");
                 return;
             }
 
-            var hermesVersion = await _hermesApiClient.GetTTSVersion();
-            if (hermesVersion.MajorVersion > TTS.MAJOR_VERSION || hermesVersion.MajorVersion == TTS.MAJOR_VERSION && hermesVersion.MinorVersion > TTS.MINOR_VERSION)
+            var hermesVersion = await _hermesApiClient.GetLatestTTSVersion();
+            if (hermesVersion == null)
+            {
+                _logger.Warning("Failed to fetch latest TTS version. Skipping version check.");
+            }
+            else if (hermesVersion.MajorVersion > TTS.MAJOR_VERSION || hermesVersion.MajorVersion == TTS.MAJOR_VERSION && hermesVersion.MinorVersion > TTS.MINOR_VERSION)
             {
                 _logger.Information($"A new update for TTS is avaiable! Version {hermesVersion.MajorVersion}.{hermesVersion.MinorVersion} is available at {hermesVersion.Download}");
                 var changes = hermesVersion.Changelog.Split("\n");
@@ -87,9 +101,11 @@ namespace TwitchChatTTS
             }
 
             var emoteSet = await _sevenApiClient.FetchChannelEmoteSet(_user.TwitchUserId.ToString());
+            _user.SevenEmoteSetId = emoteSet.Id;
+
             await InitializeEmotes(_sevenApiClient, emoteSet);
             await InitializeHermesWebsocket();
-            await InitializeSevenTv(emoteSet.Id);
+            await InitializeSevenTv();
             await InitializeObs();
 
             AudioPlaybackEngine.Instance.AddOnMixerInputEnded((object? s, SampleProviderEventArgs e) =>
@@ -108,7 +124,7 @@ namespace TwitchChatTTS
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
-                            _logger.Warning("TTS Buffer -Cancellation requested.");
+                            _logger.Warning("TTS Buffer - Cancellation requested.");
                             return;
                         }
 
@@ -170,9 +186,12 @@ namespace TwitchChatTTS
                         }
 
                         _logger.Debug("Playing message via TTS: " + m.Message);
-                        _player.Playing = m.Audio;
+
                         if (m.Audio != null)
+                        {
+                            _player.Playing = m.Audio;
                             AudioPlaybackEngine.Instance.AddMixerInput(m.Audio);
+                        }
                     }
                     catch (Exception e)
                     {
@@ -238,6 +257,39 @@ namespace TwitchChatTTS
             var redemptions = await hermes.FetchRedemptions();
             _redemptionManager.Initialize(redemptions, redemptionActions.ToDictionary(a => a.Name, a => a));
             _logger.Information($"Redemption Manager has been initialized with {redemptionActions.Count()} actions & {redemptions.Count()} redemptions.");
+
+            _chatterGroupManager.Clear();
+            _permissionManager.Clear();
+
+            var groups = await hermes.FetchGroups();
+            var groupsById = groups.ToDictionary(g => g.Id, g => g);
+            foreach (var group in groups)
+                _chatterGroupManager.Add(group);
+            _logger.Information($"{groups.Count()} groups have been loaded.");
+
+            var groupChatters = await hermes.FetchGroupChatters();
+            _logger.Debug($"{groupChatters.Count()} group users have been fetched.");
+
+            var permissions = await hermes.FetchGroupPermissions();
+            foreach (var permission in permissions)
+            {
+                _logger.Debug($"Adding group permission [permission id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}][allow: {permission.Allow?.ToString() ?? "null"}]");
+                if (!groupsById.TryGetValue(permission.GroupId, out var group))
+                {
+                    _logger.Warning($"Failed to find group by id [permission id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}]");
+                    continue;
+                }
+
+                var path = $"{group.Name}.{permission.Path}";
+                _permissionManager.Set(path, permission.Allow);
+                _logger.Debug($"Added group permission [id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}]");
+            }
+            _logger.Information($"{permissions.Count()} group permissions have been loaded.");
+
+            foreach (var chatter in groupChatters)
+                if (groupsById.TryGetValue(chatter.GroupId, out var group))
+                    _chatterGroupManager.Add(chatter.ChatterId, group.Name);
+            _logger.Information($"Users in each group have been loaded.");
         }
 
         private async Task InitializeHermesWebsocket()
@@ -246,13 +298,13 @@ namespace TwitchChatTTS
             {
                 _logger.Information("Initializing hermes websocket client.");
                 var hermesClient = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("hermes");
-                var url = "wss://hermes-ws.goblincaves.com";
+                var url = $"wss://{HermesSocketClient.BASE_URL}";
                 _logger.Debug($"Attempting to connect to {url}");
                 await hermesClient.ConnectAsync(url);
                 hermesClient.Connected = true;
                 await hermesClient.Send(1, new HermesLoginMessage()
                 {
-                    ApiKey = _configuration.Hermes.Token,
+                    ApiKey = _configuration.Hermes!.Token!,
                     MajorVersion = TTS.MAJOR_VERSION,
                     MinorVersion = TTS.MINOR_VERSION,
                 });
@@ -263,18 +315,18 @@ namespace TwitchChatTTS
             }
         }
 
-        private async Task InitializeSevenTv(string emoteSetId)
+        private async Task InitializeSevenTv()
         {
             try
             {
                 _logger.Information("Initializing 7tv websocket client.");
                 var sevenClient = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("7tv");
-                if (string.IsNullOrWhiteSpace(emoteSetId))
+                if (string.IsNullOrWhiteSpace(_user.SevenEmoteSetId))
                 {
                     _logger.Warning("Could not fetch 7tv emotes.");
                     return;
                 }
-                var url = $"{SevenApiClient.WEBSOCKET_URL}@emote_set.*<object_id={emoteSetId}>";
+                var url = $"{SevenApiClient.WEBSOCKET_URL}@emote_set.*<object_id={_user.SevenEmoteSetId}>";
                 _logger.Debug($"Attempting to connect to {url}");
                 await sevenClient.ConnectAsync($"{url}");
             }
@@ -341,7 +393,7 @@ namespace TwitchChatTTS
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "Unable to send emote usage message.");
+                    _logger.Error(ex, "Unable to either execute a command or to send emote usage message.");
                 }
             });
 

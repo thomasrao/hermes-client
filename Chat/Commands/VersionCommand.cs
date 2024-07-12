@@ -13,7 +13,7 @@ namespace TwitchChatTTS.Chat.Commands
             _logger = logger;
         }
 
-        public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
         {
             return message.IsBroadcaster;
         }

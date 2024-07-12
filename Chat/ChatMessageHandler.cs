@@ -10,17 +10,22 @@ using TwitchChatTTS.Seven;
 using TwitchChatTTS.Chat.Commands;
 using TwitchChatTTS.Hermes.Socket;
 using HermesSocketLibrary.Socket.Data;
+using TwitchChatTTS.Chat.Groups.Permissions;
+using TwitchChatTTS.Chat.Groups;
 
 
 public class ChatMessageHandler
 {
     private readonly User _user;
-    private readonly Configuration _configuration;
-    private readonly EmoteDatabase _emotes;
     private readonly TTSPlayer _player;
     private readonly ChatCommandManager _commands;
+    private readonly IGroupPermissionManager _permissionManager;
+    private readonly IChatterGroupManager _chatterGroupManager;
+    private readonly EmoteDatabase _emotes;
     private readonly OBSSocketClient? _obsClient;
     private readonly HermesSocketClient? _hermesClient;
+    private readonly Configuration _configuration;
+
     private readonly ILogger _logger;
 
     private Regex sfxRegex;
@@ -33,6 +38,8 @@ public class ChatMessageHandler
         User user,
         TTSPlayer player,
         ChatCommandManager commands,
+        IGroupPermissionManager permissionManager,
+        IChatterGroupManager chatterGroupManager,
         EmoteDatabase emotes,
         [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obsClient,
         [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermesClient,
@@ -43,13 +50,15 @@ public class ChatMessageHandler
         _user = user;
         _player = player;
         _commands = commands;
+        _permissionManager = permissionManager;
+        _chatterGroupManager = chatterGroupManager;
         _emotes = emotes;
         _obsClient = obsClient as OBSSocketClient;
         _hermesClient = hermesClient as HermesSocketClient;
         _configuration = configuration;
         _logger = logger;
 
-        _chatters = null;
+        _chatters = new HashSet<long>();
         sfxRegex = new Regex(@"\(([A-Za-z0-9_-]+)\)");
     }
 
@@ -66,18 +75,28 @@ public class ChatMessageHandler
         var chatterId = long.Parse(m.UserId);
         var tasks = new List<Task>();
 
-        var blocked = _user.ChatterFilters.TryGetValue(m.Username, out TTSUsernameFilter? filter) && filter.Tag == "blacklisted";
+        var permissionPath = "tts.chat.messages.read";
+        if (!string.IsNullOrWhiteSpace(m.CustomRewardId))
+            permissionPath = "tts.chat.redemptions.read";
+
+        var checks = new bool[] { true, m.IsSubscriber, m.IsVip, m.IsModerator, m.IsBroadcaster };
+        var defaultGroups = new string[] { "everyone", "subscribers", "vip", "moderators", "broadcaster" };
+        var customGroups = _chatterGroupManager.GetGroupNamesFor(chatterId);
+        var groups = defaultGroups.Where((e, i) => checks[i]).Union(customGroups);
+
+        var permission = chatterId == _user.OwnerId ? true : _permissionManager.CheckIfAllowed(groups, permissionPath);
+        var blocked = permission != true;
         if (!blocked || m.IsBroadcaster)
         {
             try
             {
-                var commandResult = await _commands.Execute(msg, m);
+                var commandResult = await _commands.Execute(msg, m, groups);
                 if (commandResult != ChatCommandResult.Unknown)
                     return new MessageResult(MessageStatus.Command, -1, -1);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Failed executing a chat command [message: {msg}][chatter: {m.Username}][cid: {m.UserId}][mid: {m.Id}]");
+                _logger.Error(ex, $"Failed executing a chat command [message: {msg}][chatter: {m.Username}][chatter id: {m.UserId}][message id: {m.Id}]");
             }
         }
 
@@ -100,7 +119,7 @@ public class ChatMessageHandler
         // Filter highly repetitive words (like emotes) from the message.
         int totalEmoteUsed = 0;
         var emotesUsed = new HashSet<string>();
-        var words = msg.Split(" ");
+        var words = msg.Split(' ');
         var wordCounter = new Dictionary<string, int>();
         string filteredMsg = string.Empty;
         var newEmotes = new Dictionary<string, string>();
@@ -164,26 +183,13 @@ public class ChatMessageHandler
         }
 
         // Determine the priority of this message
-        int priority = 0;
-        if (m.IsStaff)
-            priority = int.MinValue;
-        else if (filter?.Tag == "priority")
-            priority = int.MinValue + 1;
-        else if (m.IsModerator)
-            priority = -100;
-        else if (m.IsVip)
-            priority = -10;
-        else if (m.IsPartner)
-            priority = -5;
-        else if (m.IsHighlighted)
-            priority = -1;
-        priority = Math.Min(priority, -m.SubscribedMonthCount * (m.IsSubscriber ? 2 : 1));
+        int priority = _chatterGroupManager.GetPriorityFor(groups) + m.SubscribedMonthCount * (m.IsSubscriber ? 10 : 5);
 
         // Determine voice selected.
         string voiceSelected = _user.DefaultTTSVoice;
-        if (long.TryParse(e.ChatMessage.UserId, out long userId) && _user.VoicesSelected?.ContainsKey(userId) == true)
+        if (_user.VoicesSelected?.ContainsKey(chatterId) == true)
         {
-            var voiceId = _user.VoicesSelected[userId];
+            var voiceId = _user.VoicesSelected[chatterId];
             if (_user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) && voiceName != null)
             {
                 if (_user.VoicesEnabled.Contains(voiceName) || chatterId == _user.OwnerId || m.IsStaff)
@@ -230,7 +236,7 @@ public class ChatMessageHandler
 
         if (parts.Length == 1)
         {
-            _logger.Information($"Username: {m.Username}; User ID: {m.UserId}; Voice: {voice}; Priority: {priority}; Message: {message}; Month: {m.SubscribedMonthCount}; {badgesString}");
+            _logger.Information($"Username: {m.Username}; User ID: {m.UserId}; Voice: {voice}; Priority: {priority}; Message: {message}; Month: {m.SubscribedMonthCount}; Reward Id: {m.CustomRewardId}; {badgesString}");
             _player.Add(new TTSMessage()
             {
                 Voice = voice,

@@ -28,7 +28,7 @@ namespace TwitchChatTTS.Chat.Commands
             AddParameter(ttsVoiceParameter);
         }
 
-        public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
         {
             return message.IsModerator || message.IsBroadcaster || message.IsSubscriber || message.Bits >= 100;
         }

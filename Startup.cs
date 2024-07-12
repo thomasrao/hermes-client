@@ -29,6 +29,8 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 using TwitchChatTTS.Twitch.Redemptions;
+using TwitchChatTTS.Chat.Groups.Permissions;
+using TwitchChatTTS.Chat.Groups;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -53,7 +55,7 @@ var logger = new LoggerConfiguration()
     .MinimumLevel.Override("TwitchLib", LogEventLevel.Warning)
     .MinimumLevel.Override("mariuszgromada", LogEventLevel.Error)
     .Enrich.FromLogContext()
-    .WriteTo.File("logs/log-.log", restrictedToMinimumLevel: LogEventLevel.Debug, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 7)
+    .WriteTo.File("logs/log-.log", restrictedToMinimumLevel: LogEventLevel.Debug, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 3)
     .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information, theme: SystemConsoleTheme.Colored)
     .CreateLogger();
 
@@ -78,6 +80,8 @@ s.AddKeyedSingleton<ChatCommand, RefreshTTSDataCommand>("command-refreshttsdata"
 s.AddKeyedSingleton<ChatCommand, OBSCommand>("command-obs");
 s.AddKeyedSingleton<ChatCommand, TTSCommand>("command-tts");
 s.AddKeyedSingleton<ChatCommand, VersionCommand>("command-version");
+s.AddSingleton<IChatterGroupManager, ChatterGroupManager>();
+s.AddSingleton<IGroupPermissionManager, GroupPermissionManager>();
 s.AddSingleton<ChatCommandManager>();
 
 s.AddSingleton<TTSPlayer>();

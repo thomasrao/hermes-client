@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using TwitchChatTTS.Chat.Groups;
+using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchLib.Client.Models;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -10,15 +12,26 @@ namespace TwitchChatTTS.Chat.Commands
         private IDictionary<string, ChatCommand> _commands;
         private readonly TwitchBotAuth _token;
         private readonly User _user;
+        private readonly IGroupPermissionManager _permissionManager;
+        private readonly IChatterGroupManager _chatterGroupManager;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger _logger;
         private string CommandStartSign { get; } = "!";
 
 
-        public ChatCommandManager(TwitchBotAuth token, User user, IServiceProvider serviceProvider, ILogger logger)
+        public ChatCommandManager(
+            TwitchBotAuth token,
+            User user,
+            IGroupPermissionManager permissionManager,
+            IChatterGroupManager chatterGroupManager,
+            IServiceProvider serviceProvider,
+            ILogger logger
+        )
         {
             _token = token;
             _user = user;
+            _permissionManager = permissionManager;
+            _chatterGroupManager = chatterGroupManager;
             _serviceProvider = serviceProvider;
             _logger = logger;
 
@@ -56,7 +69,7 @@ namespace TwitchChatTTS.Chat.Commands
             }
         }
 
-        public async Task<ChatCommandResult> Execute(string arg, ChatMessage message)
+        public async Task<ChatCommandResult> Execute(string arg, ChatMessage message, IEnumerable<string> groups)
         {
             if (_token.BroadcasterId == null)
                 return ChatCommandResult.Unknown;
@@ -80,19 +93,31 @@ namespace TwitchChatTTS.Chat.Commands
             if (!_commands.TryGetValue(com, out ChatCommand? command) || command == null)
             {
                 // Could be for another bot or just misspelled.
-                _logger.Debug($"Failed to find command named '{com}' [args: {arg}][chatter: {message.Username}][cid: {message.UserId}]");
+                _logger.Debug($"Failed to find command named '{com}' [args: {arg}][chatter: {message.Username}][chatter id: {message.UserId}]");
                 return ChatCommandResult.Missing;
             }
 
-            if (!await command.CheckPermissions(message, broadcasterId) && message.UserId != _user.OwnerId?.ToString() && !message.IsStaff)
+            // Check if command can be executed by this chatter.
+            long chatterId = long.Parse(message.UserId);
+            if (chatterId != _user.OwnerId)
             {
-                _logger.Warning($"Chatter is missing permission to execute command named '{com}' [args: {arg}][chatter: {message.Username}][cid: {message.UserId}]");
-                return ChatCommandResult.Permission;
+                var executable = command.DefaultPermissionsOverwrite ? false : CanExecute(chatterId, groups, com);
+                if (executable == false)
+                {
+                    _logger.Debug($"Denied permission to use command [chatter id: {chatterId}][command: {com}]");
+                    return ChatCommandResult.Permission;
+                }
+                else if (executable == null && !await command.CheckDefaultPermissions(message, broadcasterId))
+                {
+                    _logger.Debug($"Chatter is missing default permission to execute command named '{com}' [args: {arg}][chatter: {message.Username}][chatter id: {message.UserId}]");
+                    return ChatCommandResult.Permission;
+                }
             }
 
+            // Check if the syntax is correct.
             if (command.Parameters.Count(p => !p.Optional) > args.Length)
             {
-                _logger.Warning($"Command syntax issue when executing command named '{com}' [args: {arg}][chatter: {message.Username}][cid: {message.UserId}]");
+                _logger.Debug($"Command syntax issue when executing command named '{com}' [args: {arg}][chatter: {message.Username}][chatter id: {message.UserId}]");
                 return ChatCommandResult.Syntax;
             }
 
@@ -111,12 +136,18 @@ namespace TwitchChatTTS.Chat.Commands
             }
             catch (Exception e)
             {
-                _logger.Error(e, $"Command '{arg}' failed.");
+                _logger.Error(e, $"Command '{arg}' failed [args: {arg}][chatter: {message.Username}][chatter id: {message.UserId}]");
                 return ChatCommandResult.Fail;
             }
 
-            _logger.Information($"Executed the {com} command [arguments: {arg}]");
+            _logger.Information($"Executed the {com} command [args: {arg}][chatter: {message.Username}][chatter id: {message.UserId}]");
             return ChatCommandResult.Success;
+        }
+
+        private bool? CanExecute(long chatterId, IEnumerable<string> groups, string path)
+        {
+            _logger.Debug($"Checking for permission [chatter id: {chatterId}][group: {string.Join(", ", groups)}][path: {path}]");
+            return _permissionManager.CheckIfAllowed(groups, path);
         }
     }
 }

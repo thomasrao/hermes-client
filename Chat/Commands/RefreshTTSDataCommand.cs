@@ -1,4 +1,7 @@
 using Serilog;
+using TwitchChatTTS.Chat.Groups;
+using TwitchChatTTS.Chat.Groups.Permissions;
+using TwitchChatTTS.OBS.Socket.Manager;
 using TwitchChatTTS.Twitch.Redemptions;
 using TwitchLib.Client.Models;
 
@@ -8,30 +11,43 @@ namespace TwitchChatTTS.Chat.Commands
     {
         private readonly User _user;
         private readonly RedemptionManager _redemptionManager;
+        private readonly IGroupPermissionManager _permissionManager;
+        private readonly IChatterGroupManager _chatterGroupManager;
+        private readonly OBSManager _obsManager;
         private readonly HermesApiClient _hermesApi;
         private readonly ILogger _logger;
 
-        public RefreshTTSDataCommand(User user, RedemptionManager redemptionManager, HermesApiClient hermesApi, ILogger logger)
-        : base("refresh", "Refreshes certain TTS related data on the client.")
+        public RefreshTTSDataCommand(
+            User user,
+            RedemptionManager redemptionManager,
+            IGroupPermissionManager permissionManager,
+            IChatterGroupManager chatterGroupManager,
+            OBSManager obsManager,
+            HermesApiClient hermesApi,
+            ILogger logger
+        ) : base("refresh", "Refreshes certain TTS related data on the client.")
         {
             _user = user;
             _redemptionManager = redemptionManager;
+            _permissionManager = permissionManager;
+            _chatterGroupManager = chatterGroupManager;
+            _obsManager = obsManager;
             _hermesApi = hermesApi;
             _logger = logger;
         }
 
-        public override async Task<bool> CheckPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
         {
             return message.IsModerator || message.IsBroadcaster;
         }
 
         public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
         {
-            var service = args.FirstOrDefault();
-            if (service == null)
+            var value = args.FirstOrDefault();
+            if (value == null)
                 return;
 
-            switch (service)
+            switch (value.ToLower())
             {
                 case "tts_voice_enabled":
                     var voicesEnabled = await _hermesApi.FetchTTSEnabledVoices();
@@ -52,6 +68,13 @@ namespace TwitchChatTTS.Chat.Commands
                     _logger.Information($"{_user.ChatterFilters.Where(f => f.Value.Tag == "blacklisted").Count()} username(s) have been blocked.");
                     _logger.Information($"{_user.ChatterFilters.Where(f => f.Value.Tag == "priority").Count()} user(s) have been prioritized.");
                     break;
+                case "selected_voices":
+                    {
+                        var voicesSelected = await _hermesApi.FetchTTSChatterSelectedVoices();
+                        _user.VoicesSelected = voicesSelected.ToDictionary(s => s.ChatterId, s => s.Voice);
+                        _logger.Information($"{_user.VoicesSelected.Count} TTS voices have been selected for specific chatters.");
+                        break;
+                    }
                 case "default_voice":
                     _user.DefaultTTSVoice = await _hermesApi.FetchTTSDefaultVoice();
                     _logger.Information("TTS Default Voice: " + _user.DefaultTTSVoice);
@@ -61,6 +84,58 @@ namespace TwitchChatTTS.Chat.Commands
                     var redemptions = await _hermesApi.FetchRedemptions();
                     _redemptionManager.Initialize(redemptions, redemptionActions.ToDictionary(a => a.Name, a => a));
                     _logger.Information($"Redemption Manager has been refreshed with {redemptionActions.Count()} actions & {redemptions.Count()} redemptions.");
+                    break;
+                case "obs_cache":
+                    {
+                        try
+                        {
+                            _obsManager.ClearCache();
+                            await _obsManager.GetGroupList(async groups => await _obsManager.GetGroupSceneItemList(groups));
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.Error(e, "Failed to load OBS group info via command.");
+                        }
+                        break;
+                    }
+                case "permissions":
+                    {
+                        _chatterGroupManager.Clear();
+                        _permissionManager.Clear();
+
+                        var groups = await _hermesApi.FetchGroups();
+                        var groupsById = groups.ToDictionary(g => g.Id, g => g);
+                        foreach (var group in groups)
+                            _chatterGroupManager.Add(group);
+                        _logger.Information($"{groups.Count()} groups have been loaded.");
+
+                        var groupChatters = await _hermesApi.FetchGroupChatters();
+                        _logger.Debug($"{groupChatters.Count()} group users have been fetched.");
+
+                        var permissions = await _hermesApi.FetchGroupPermissions();
+                        foreach (var permission in permissions)
+                        {
+                            _logger.Debug($"Adding group permission [id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}][allow: {permission.Allow?.ToString() ?? "null"}]");
+                            if (groupsById.TryGetValue(permission.GroupId, out var group))
+                            {
+                                _logger.Warning($"Failed to find group by id [id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}]");
+                                continue;
+                            }
+
+                            var path = $"{group.Name}.{permission.Path}";
+                            _permissionManager.Set(path, permission.Allow);
+                            _logger.Debug($"Added group permission [id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}]");
+                        }
+                        _logger.Information($"{permissions.Count()} group permissions have been loaded.");
+
+                        foreach (var chatter in groupChatters)
+                            if (groupsById.TryGetValue(chatter.GroupId, out var group))
+                                _chatterGroupManager.Add(chatter.ChatterId, group.Name);
+                        _logger.Information($"Users in each group have been loaded.");
+                        break;
+                    }
+                default:
+                    _logger.Warning($"Unknown refresh value given [value: {value}]");
                     break;
             }
         }

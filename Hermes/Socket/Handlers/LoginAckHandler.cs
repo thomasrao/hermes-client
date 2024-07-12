@@ -31,13 +31,10 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 _logger.Warning("Another client has connected to the same account.");
                 return;
             }
-            else
-            {
-                client.UserId = message.UserId;
-                _logger.Information($"Logged in as {_user.TwitchUsername}.");
-            }
 
+            client.UserId = message.UserId;
             _user.OwnerId = message.OwnerId;
+            _logger.Information($"Logged in as {_user.TwitchUsername} {(message.WebLogin ? "via web" : "via TTS app")}.");
 
             await client.Send(3, new RequestMessage()
             {

@@ -11,8 +11,8 @@ public class TTSPlayer
 
     public TTSPlayer()
     {
-        _messages = new PriorityQueue<TTSMessage, int>();
-        _buffer = new PriorityQueue<TTSMessage, int>();
+        _messages = new PriorityQueue<TTSMessage, int>(new DescendingOrder());
+        _buffer = new PriorityQueue<TTSMessage, int>(new DescendingOrder());
         _mutex = new Mutex();
         _mutex2 = new Mutex();
     }
@@ -103,6 +103,10 @@ public class TTSPlayer
     public bool IsEmpty()
     {
         return _messages.Count == 0;
+    }
+
+    private class DescendingOrder : IComparer<int> {
+        public int Compare(int x, int y) => y.CompareTo(x);
     }
 }
 

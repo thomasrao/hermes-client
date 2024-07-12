@@ -30,8 +30,7 @@ namespace TwitchChatTTS.Seven
 
         public void Remove(string emoteName)
         {
-            if (_emotes.ContainsKey(emoteName))
-                _emotes.Remove(emoteName);
+            _emotes.Remove(emoteName);
         }
     }
 

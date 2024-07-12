@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace TwitchChatTTS.OBS.Socket.Data
 {
     public class RequestBatchMessage
@@ -5,7 +7,7 @@ namespace TwitchChatTTS.OBS.Socket.Data
         public string RequestId { get; set; }
         public bool HaltOnFailure { get; set; }
         public RequestBatchExecutionType ExecutionType { get; set; }
-        public IEnumerable<object> Requests { get; set;}
+        public IEnumerable<object> Requests { get; set; }
 
         public RequestBatchMessage(string id, IEnumerable<object> requests, bool haltOnFailure = false, RequestBatchExecutionType executionType = RequestBatchExecutionType.SerialRealtime)
         {
@@ -16,7 +18,8 @@ namespace TwitchChatTTS.OBS.Socket.Data
         }
     }
 
-    public enum RequestBatchExecutionType {
+    public enum RequestBatchExecutionType
+    {
         None = -1,
         SerialRealtime = 0,
         SerialFrame = 1,

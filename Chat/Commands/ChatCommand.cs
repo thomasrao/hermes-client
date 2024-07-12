@@ -8,12 +8,15 @@ namespace TwitchChatTTS.Chat.Commands
         public string Name { get; }
         public string Description { get; }
         public IList<ChatCommandParameter> Parameters { get => _parameters.AsReadOnly(); }
+        public bool DefaultPermissionsOverwrite { get; }
+
         private IList<ChatCommandParameter> _parameters;
 
         public ChatCommand(string name, string description)
         {
             Name = name;
             Description = description;
+            DefaultPermissionsOverwrite = false;
             _parameters = new List<ChatCommandParameter>();
         }
 
@@ -24,7 +27,7 @@ namespace TwitchChatTTS.Chat.Commands
             }
         }
 
-        public abstract Task<bool> CheckPermissions(ChatMessage message, long broadcasterId);
+        public abstract Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId);
         public abstract Task Execute(IList<string> args, ChatMessage message, long broadcasterId);
     }
 }

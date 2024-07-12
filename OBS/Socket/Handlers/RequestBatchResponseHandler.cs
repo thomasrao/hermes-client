@@ -44,7 +44,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                     try
                     {
                         _logger.Debug($"Request response from OBS request batch #{i + 1}/{count}: {results[i]}");
-                        var response = JsonSerializer.Deserialize<RequestResponseMessage>(results[i].ToString(), new JsonSerializerOptions()
+                        var response = JsonSerializer.Deserialize<RequestResponseMessage>(results[i].ToString()!, new JsonSerializerOptions()
                         {
                             PropertyNameCaseInsensitive = false,
                             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
