@@ -11,8 +11,6 @@ using TwitchChatTTS.Seven.Socket;
 using TwitchChatTTS.OBS.Socket.Handlers;
 using TwitchChatTTS.Seven.Socket.Handlers;
 using TwitchChatTTS.Seven.Socket.Context;
-using TwitchChatTTS.Seven;
-using TwitchChatTTS.OBS.Socket.Context;
 using TwitchLib.Client.Interfaces;
 using TwitchLib.Client;
 using TwitchLib.PubSub.Interfaces;
@@ -31,6 +29,8 @@ using Serilog.Sinks.SystemConsole.Themes;
 using TwitchChatTTS.Twitch.Redemptions;
 using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Chat.Groups;
+using TwitchChatTTS.Chat.Emotes;
+using HermesSocketLibrary.Requests.Callbacks;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -61,6 +61,7 @@ var logger = new LoggerConfiguration()
 
 s.AddSerilog(logger);
 s.AddSingleton<User>(new User());
+s.AddSingleton<ICallbackManager<HermesRequestData>, CallbackManager<HermesRequestData>>();
 
 s.AddSingleton<JsonSerializerOptions>(new JsonSerializerOptions()
 {
@@ -71,6 +72,7 @@ s.AddSingleton<JsonSerializerOptions>(new JsonSerializerOptions()
 // Command parameters
 s.AddKeyedSingleton<ChatCommandParameter, TTSVoiceNameParameter>("parameter-ttsvoicename");
 s.AddKeyedSingleton<ChatCommandParameter, UnvalidatedParameter>("parameter-unvalidated");
+s.AddKeyedSingleton<ChatCommandParameter, SimpleListedParameter>("parameter-simplelisted");
 s.AddKeyedSingleton<ChatCommand, SkipAllCommand>("command-skipall");
 s.AddKeyedSingleton<ChatCommand, SkipCommand>("command-skip");
 s.AddKeyedSingleton<ChatCommand, VoiceCommand>("command-voice");
@@ -88,24 +90,16 @@ s.AddSingleton<TTSPlayer>();
 s.AddSingleton<ChatMessageHandler>();
 s.AddSingleton<RedemptionManager>();
 s.AddSingleton<HermesApiClient>();
-s.AddSingleton<TwitchBotAuth>(new TwitchBotAuth());
+s.AddSingleton<TwitchBotAuth>();
 s.AddTransient<IClient, TwitchLib.Communication.Clients.WebSocketClient>();
 s.AddTransient<ITwitchClient, TwitchClient>();
 s.AddTransient<ITwitchPubSub, TwitchPubSub>();
 s.AddSingleton<TwitchApiClient>();
 
 s.AddSingleton<SevenApiClient>();
-s.AddSingleton<EmoteDatabase>(new EmoteDatabase());
+s.AddSingleton<IEmoteDatabase, EmoteDatabase>();
 
 // OBS websocket
-s.AddSingleton<HelloContext>(sp =>
-    new HelloContext()
-    {
-        Host = string.IsNullOrWhiteSpace(configuration.Obs?.Host) ? null : configuration.Obs.Host.Trim(),
-        Port = configuration.Obs?.Port,
-        Password = string.IsNullOrWhiteSpace(configuration.Obs?.Password) ? null : configuration.Obs.Password.Trim()
-    }
-);
 s.AddSingleton<OBSManager>();
 s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("obs-hello");
 s.AddKeyedSingleton<IWebSocketHandler, IdentifiedHandler>("obs-identified");
@@ -123,15 +117,9 @@ s.AddTransient(sp =>
     var logger = sp.GetRequiredService<ILogger>();
     var client = sp.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("7tv") as SevenSocketClient;
     if (client == null)
-    {
-        logger.Error("7tv client == null.");
         return new ReconnectContext() { SessionId = null };
-    }
     if (client.ConnectionDetails == null)
-    {
-        logger.Error("Connection details in 7tv client == null.");
         return new ReconnectContext() { SessionId = null };
-    }
     return new ReconnectContext() { SessionId = client.ConnectionDetails.SessionId };
 });
 s.AddKeyedSingleton<IWebSocketHandler, SevenHelloHandler>("7tv-sevenhello");
@@ -141,6 +129,7 @@ s.AddKeyedSingleton<IWebSocketHandler, ReconnectHandler>("7tv-reconnect");
 s.AddKeyedSingleton<IWebSocketHandler, ErrorHandler>("7tv-error");
 s.AddKeyedSingleton<IWebSocketHandler, EndOfStreamHandler>("7tv-endofstream");
 
+s.AddSingleton<SevenManager>();
 s.AddKeyedSingleton<HandlerManager<WebSocketClient, IWebSocketHandler>, SevenHandlerManager>("7tv");
 s.AddKeyedSingleton<HandlerTypeManager<WebSocketClient, IWebSocketHandler>, SevenHandlerTypeManager>("7tv");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");

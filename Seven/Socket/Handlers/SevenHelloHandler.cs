@@ -23,9 +23,8 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
             if (sender is not SevenSocketClient seven || seven == null)
                 return;
 
-            seven.Connected = true;
             seven.ConnectionDetails = message;
-            _logger.Information("Connected to 7tv websockets.");
+            _logger.Debug("Received hello handshake ack.");
         }
     }
 }

@@ -3,6 +3,7 @@ using CommonSocketLibrary.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Chat.Commands.Parameters;
+using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket.Data;
 using TwitchChatTTS.OBS.Socket.Manager;
 using TwitchLib.Client.Models;
@@ -19,7 +20,6 @@ namespace TwitchChatTTS.Chat.Commands
             [FromKeyedServices("parameter-unvalidated")] ChatCommandParameter unvalidatedParameter,
             User user,
             OBSManager manager,
-            [FromKeyedServices("obs")] SocketClient<WebSocketMessage> hermesClient,
             ILogger logger
         ) : base("obs", "Various obs commands.")
         {
@@ -28,14 +28,17 @@ namespace TwitchChatTTS.Chat.Commands
             _logger = logger;
 
             AddParameter(unvalidatedParameter);
+            AddParameter(unvalidatedParameter, optional: true);
+            AddParameter(unvalidatedParameter, optional: true);
+            AddParameter(unvalidatedParameter, optional: true);
         }
 
-        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message)
         {
             return message.IsModerator || message.IsBroadcaster;
         }
 
-        public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
+        public override async Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client)
         {
             if (_user == null || _user.VoicesAvailable == null)
                 return;

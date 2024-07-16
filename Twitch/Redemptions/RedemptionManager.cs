@@ -1,9 +1,11 @@
 using System.Reflection;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
+using HermesSocketLibrary.Requests.Messages;
 using Microsoft.Extensions.DependencyInjection;
 using org.mariuszgromada.math.mxparser;
 using Serilog;
+using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket.Data;
 using TwitchChatTTS.OBS.Socket.Manager;
 
@@ -14,7 +16,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
         private readonly IDictionary<string, IList<RedeemableAction>> _store;
         private readonly User _user;
         private readonly OBSManager _obsManager;
-        private readonly SocketClient<WebSocketMessage> _hermesClient;
+        private readonly HermesSocketClient _hermes;
         private readonly ILogger _logger;
         private readonly Random _random;
         private bool _isReady;
@@ -23,13 +25,13 @@ namespace TwitchChatTTS.Twitch.Redemptions
         public RedemptionManager(
             User user,
             OBSManager obsManager,
-            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermesClient,
+            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
             ILogger logger)
         {
             _store = new Dictionary<string, IList<RedeemableAction>>();
             _user = user;
             _obsManager = obsManager;
-            _hermesClient = hermesClient;
+            _hermes = (hermes as HermesSocketClient)!;
             _logger = logger;
             _random = new Random();
             _isReady = false;
@@ -46,6 +48,14 @@ namespace TwitchChatTTS.Twitch.Redemptions
 
         public async Task Execute(RedeemableAction action, string senderDisplayName, long senderId)
         {
+            _logger.Debug($"Executing an action for a redemption [action: {action.Name}][action type: {action.Type}][chatter: {senderDisplayName}][chatter id: {senderId}]");
+
+            if (action.Data == null)
+            {
+                _logger.Warning($"No data was provided for an action, caused by redemption [action: {action.Name}][action type: {action.Type}][chatter: {senderDisplayName}][chatter id: {senderId}]");
+                return;
+            }
+
             try
             {
                 switch (action.Type)
@@ -53,12 +63,12 @@ namespace TwitchChatTTS.Twitch.Redemptions
                     case "WRITE_TO_FILE":
                         Directory.CreateDirectory(Path.GetDirectoryName(action.Data["file_path"]));
                         await File.WriteAllTextAsync(action.Data["file_path"], ReplaceContentText(action.Data["file_content"], senderDisplayName));
-                        _logger.Debug($"Overwritten text to file [file: {action.Data["file_path"]}]");
+                        _logger.Debug($"Overwritten text to file [file: {action.Data["file_path"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         break;
                     case "APPEND_TO_FILE":
                         Directory.CreateDirectory(Path.GetDirectoryName(action.Data["file_path"]));
                         await File.AppendAllTextAsync(action.Data["file_path"], ReplaceContentText(action.Data["file_content"], senderDisplayName));
-                        _logger.Debug($"Appended text to file [file: {action.Data["file_path"]}]");
+                        _logger.Debug($"Appended text to file [file: {action.Data["file_path"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         break;
                     case "OBS_TRANSFORM":
                         var type = typeof(OBSTransformationData);
@@ -74,29 +84,30 @@ namespace TwitchChatTTS.Twitch.Redemptions
                                 PropertyInfo? prop = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
                                 if (prop == null)
                                 {
-                                    _logger.Warning($"Failed to find property for OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][property: {propertyName}]");
+                                    _logger.Warning($"Failed to find property for OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][property: {propertyName}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                                     continue;
                                 }
 
                                 var currentValue = prop.GetValue(d);
                                 if (currentValue == null)
                                 {
-                                    _logger.Warning($"Found a null value from OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][property: {propertyName}]");
+                                    _logger.Warning($"Found a null value from OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][property: {propertyName}][chatter: {senderDisplayName}][chatter id: {senderId}]");
+                                    continue;
                                 }
 
                                 Expression expression = new Expression(expressionString);
                                 expression.addConstants(new Constant("x", (double?)currentValue ?? 0.0d));
                                 if (!expression.checkSyntax())
                                 {
-                                    _logger.Warning($"Could not parse math expression for OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][expression: {expressionString}][property: {propertyName}]");
+                                    _logger.Warning($"Could not parse math expression for OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][expression: {expressionString}][property: {propertyName}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                                     continue;
                                 }
 
                                 var newValue = expression.calculate();
                                 prop.SetValue(d, newValue);
-                                _logger.Debug($"OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][property: {propertyName}][old value: {currentValue}][new value: {newValue}][expression: {expressionString}]");
+                                _logger.Debug($"OBS transformation [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][property: {propertyName}][old value: {currentValue}][new value: {newValue}][expression: {expressionString}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                             }
-                            _logger.Debug($"Finished applying the OBS transformation property changes [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}]");
+                            _logger.Debug($"Finished applying the OBS transformation property changes [scene: {action.Data["scene_name"]}][source: {action.Data["scene_item_name"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         });
                         break;
                     case "TOGGLE_OBS_VISIBILITY":
@@ -113,63 +124,78 @@ namespace TwitchChatTTS.Twitch.Redemptions
                         await Task.Delay(int.Parse(action.Data["sleep"]));
                         break;
                     case "SPECIFIC_TTS_VOICE":
-                        var voiceId = _user.VoicesAvailable.Keys.First(id => _user.VoicesAvailable[id].ToLower() == action.Data["tts_voice"].ToLower());
-                        if (voiceId == null)
+                    case "RANDOM_TTS_VOICE":
+                        string voiceId = string.Empty;
+                        bool specific = action.Type == "SPECIFIC_TTS_VOICE";
+
+                        var voicesEnabled = _user.VoicesEnabled.ToList();
+                        if (specific)
+                            voiceId = _user.VoicesAvailable.Keys.First(id => _user.VoicesAvailable[id].ToLower() == action.Data["tts_voice"].ToLower());
+                        else
                         {
-                            _logger.Warning($"Voice specified is not valid [voice: {action.Data["tts_voice"]}]");
+                            if (!voicesEnabled.Any())
+                            {
+                                _logger.Warning($"There are no TTS voices enabled [voice pool size: {voicesEnabled.Count}][chatter: {senderDisplayName}][chatter id: {senderId}]");
+                                return;
+                            }
+                            if (voicesEnabled.Count <= 1)
+                            {
+                                _logger.Warning($"There are not enough TTS voices enabled to randomize [voice pool size: {voicesEnabled.Count}][chatter: {senderDisplayName}][chatter id: {senderId}]");
+                                return;
+                            }
+
+                            string? selectedId = null;
+                            if (!_user.VoicesSelected.ContainsKey(senderId))
+                                selectedId = _user.VoicesAvailable.Keys.First(id => _user.VoicesAvailable[id] == _user.DefaultTTSVoice);
+                            else
+                                selectedId = _user.VoicesSelected[senderId];
+
+                            do
+                            {
+                                var randomVoice = voicesEnabled[_random.Next(voicesEnabled.Count)];
+                                voiceId = _user.VoicesAvailable.Keys.First(id => _user.VoicesAvailable[id] == randomVoice);
+                            } while (voiceId == selectedId);
+                        }
+                        if (string.IsNullOrEmpty(voiceId))
+                        {
+                            _logger.Warning($"Voice is not valid [voice: {action.Data["tts_voice"]}][voice pool size: {voicesEnabled.Count}][source: redemption][chatter: {senderDisplayName}][chatter id: {senderId}]");
                             return;
                         }
                         var voiceName = _user.VoicesAvailable[voiceId];
                         if (!_user.VoicesEnabled.Contains(voiceName))
                         {
-                            _logger.Warning($"Voice specified is not enabled [voice: {action.Data["tts_voice"]}][voice id: {voiceId}]");
+                            _logger.Warning($"Voice is not enabled [voice: {action.Data["tts_voice"]}][voice pool size: {voicesEnabled.Count}][voice id: {voiceId}][source: redemption][chatter: {senderDisplayName}][chatter id: {senderId}]");
                             return;
                         }
-                        await _hermesClient.Send(3, new HermesSocketLibrary.Socket.Data.RequestMessage()
+
+                        if (_user.VoicesSelected.ContainsKey(senderId))
                         {
-                            Type = _user.VoicesSelected.ContainsKey(senderId) ? "update_tts_user" : "create_tts_user",
-                            Data = new Dictionary<string, object>() { { "chatter", senderId }, { "voice", voiceId } }
-                        });
-                        _logger.Debug($"Changed the TTS voice of a chatter [voice: {action.Data["tts_voice"]}][display name: {senderDisplayName}][chatter id: {senderId}]");
-                        break;
-                    case "RANDOM_TTS_VOICE":
-                        var voicesEnabled = _user.VoicesEnabled.ToList();
-                        if (!voicesEnabled.Any())
-                        {
-                            _logger.Warning($"There are no TTS voices enabled [voice pool size: {voicesEnabled.Count}]");
-                            return;
+                            await _hermes.UpdateTTSUser(senderId, voiceId);
+                            _logger.Debug($"Sent request to create chat TTS voice [voice: {voiceName}][chatter id: {senderId}][source: redemption][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         }
-                        if (voicesEnabled.Count <= 1)
+                        else
                         {
-                            _logger.Warning($"There are not enough TTS voices enabled to randomize [voice pool size: {voicesEnabled.Count}]");
-                            return;
+                            await _hermes.CreateTTSUser(senderId, voiceId);
+                            _logger.Debug($"Sent request to update chat TTS voice [voice: {voiceName}][chatter id: {senderId}][source: redemption][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         }
-                        var randomVoice = voicesEnabled[_random.Next(voicesEnabled.Count)];
-                        var randomVoiceId = _user.VoicesAvailable.Keys.First(id => _user.VoicesAvailable[id] == randomVoice);
-                        await _hermesClient.Send(3, new HermesSocketLibrary.Socket.Data.RequestMessage()
-                        {
-                            Type = _user.VoicesSelected.ContainsKey(senderId) ? "update_tts_user" : "create_tts_user",
-                            Data = new Dictionary<string, object>() { { "chatter", senderId }, { "voice", randomVoiceId } }
-                        });
-                        _logger.Debug($"Randomly changed the TTS voice of a chatter [voice: {randomVoice}][display name: {senderDisplayName}][chatter id: {senderId}]");
                         break;
                     case "AUDIO_FILE":
                         if (!File.Exists(action.Data["file_path"]))
                         {
-                            _logger.Warning($"Cannot find audio file for Twitch channel point redeem [file: {action.Data["file_path"]}]");
+                            _logger.Warning($"Cannot find audio file for Twitch channel point redeem [file: {action.Data["file_path"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                             return;
                         }
                         AudioPlaybackEngine.Instance.PlaySound(action.Data["file_path"]);
-                        _logger.Debug($"Played an audio file for channel point redeem [file: {action.Data["file_path"]}]");
+                        _logger.Debug($"Played an audio file for channel point redeem [file: {action.Data["file_path"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         break;
                     default:
-                        _logger.Warning($"Unknown redeemable action has occured. Update needed? [type: {action.Type}]");
+                        _logger.Warning($"Unknown redeemable action has occured. Update needed? [type: {action.Type}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         break;
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to execute a redemption action.");
+                _logger.Error(ex, $"Failed to execute a redemption action [action: {action.Name}][action type: {action.Type}][chatter: {senderDisplayName}][chatter id: {senderId}]");
             }
         }
 
@@ -187,9 +213,15 @@ namespace TwitchChatTTS.Twitch.Redemptions
         {
             _store.Clear();
 
-            var ordered = redemptions.OrderBy(r => r.Order);
+            var ordered = redemptions.Where(r => r != null).OrderBy(r => r.Order);
             foreach (var redemption in ordered)
             {
+                if (redemption.ActionName == null)
+                {
+                    _logger.Warning("Null value found for the action name of a redemption.");
+                    continue;
+                }
+
                 try
                 {
                     if (actions.TryGetValue(redemption.ActionName, out var action) && action != null)

@@ -1,9 +1,0 @@
-namespace TwitchChatTTS.OBS.Socket.Context
-{
-    public class HelloContext
-    {
-        public string? Host { get; set; }
-        public short? Port { get; set; }
-        public string? Password { get; set; }
-    }
-}

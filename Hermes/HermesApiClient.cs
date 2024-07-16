@@ -3,9 +3,9 @@ using TwitchChatTTS;
 using System.Text.Json;
 using HermesSocketLibrary.Requests.Messages;
 using TwitchChatTTS.Hermes;
-using TwitchChatTTS.Twitch.Redemptions;
 using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Chat.Groups;
+using HermesSocketLibrary.Socket.Data;
 
 public class HermesApiClient
 {
@@ -48,15 +48,6 @@ public class HermesApiClient
             throw new Exception("Failed to fetch Twitch API token from Hermes.");
 
         return token;
-    }
-
-    public async Task<IEnumerable<TTSUsernameFilter>> FetchTTSUsernameFilters()
-    {
-        var filters = await _web.GetJson<IEnumerable<TTSUsernameFilter>>($"https://{BASE_URL}/api/settings/tts/filter/users");
-        if (filters == null)
-            throw new Exception("Failed to fetch TTS username filters from Hermes.");
-
-        return filters;
     }
 
     public async Task<string> FetchTTSDefaultVoice()

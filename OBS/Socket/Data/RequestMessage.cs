@@ -12,5 +12,9 @@ namespace TwitchChatTTS.OBS.Socket.Data
             RequestId = id;
             RequestData = data;
         }
+
+        public RequestMessage(string type, Dictionary<string, object> data) : this(type, string.Empty, data) { }
+
+        public RequestMessage(string type) : this(type, string.Empty, new()) { }
     }
 }

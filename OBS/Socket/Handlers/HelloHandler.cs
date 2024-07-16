@@ -4,19 +4,18 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Serilog;
 using TwitchChatTTS.OBS.Socket.Data;
-using TwitchChatTTS.OBS.Socket.Context;
 
 namespace TwitchChatTTS.OBS.Socket.Handlers
 {
     public class HelloHandler : IWebSocketHandler
     {
-        private readonly HelloContext _context;
+        private readonly Configuration _configuration;
         private readonly ILogger _logger;
         public int OperationCode { get; } = 0;
 
-        public HelloHandler(HelloContext context, ILogger logger)
+        public HelloHandler(Configuration configuration, ILogger logger)
         {
-            _context = context;
+            _configuration = configuration;
             _logger = logger;
         }
 
@@ -24,9 +23,10 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
         {
             if (data is not HelloMessage message || message == null)
                 return;
-
-            _logger.Verbose("OBS websocket password: " + _context.Password);
-            if (message.Authentication == null || string.IsNullOrWhiteSpace(_context.Password))
+            
+            string? password = string.IsNullOrWhiteSpace(_configuration.Obs?.Password) ? null : _configuration.Obs.Password.Trim();
+            _logger.Verbose("OBS websocket password: " + password);
+            if (message.Authentication == null || string.IsNullOrWhiteSpace(password))
             {
                 await sender.Send(1, new IdentifyMessage(message.RpcVersion, string.Empty, 1023 | 262144));
                 return;
@@ -37,7 +37,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             _logger.Verbose("Salt: " + salt);
             _logger.Verbose("Challenge: " + challenge);
 
-            string secret = _context.Password + salt;
+            string secret = password + salt;
             byte[] bytes = Encoding.UTF8.GetBytes(secret);
             string hash = null;
             using (var sha = SHA256.Create())

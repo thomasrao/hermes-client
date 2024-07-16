@@ -6,47 +6,43 @@ using TwitchLib.Api.Core.Exceptions;
 using TwitchLib.Client.Events;
 using TwitchLib.Client.Models;
 using TwitchLib.Communication.Events;
-using Microsoft.Extensions.DependencyInjection;
-using CommonSocketLibrary.Abstract;
-using CommonSocketLibrary.Common;
 using TwitchLib.PubSub.Interfaces;
 using TwitchLib.Client.Interfaces;
-using TwitchChatTTS.OBS.Socket;
 using TwitchChatTTS.Twitch.Redemptions;
 
 public class TwitchApiClient
 {
     private readonly RedemptionManager _redemptionManager;
     private readonly HermesApiClient _hermesApiClient;
-    private readonly Configuration _configuration;
-    private readonly TwitchBotAuth _token;
     private readonly ITwitchClient _client;
     private readonly ITwitchPubSub _publisher;
-    private readonly WebClientWrap _web;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly User _user;
+    private readonly Configuration _configuration;
+    private readonly TwitchBotAuth _token;
     private readonly ILogger _logger;
+    private readonly WebClientWrap _web;
     private bool _initialized;
     private string _broadcasterId;
 
 
     public TwitchApiClient(
-        RedemptionManager redemptionManager,
-        HermesApiClient hermesApiClient,
-        Configuration configuration,
-        TwitchBotAuth token,
         ITwitchClient twitchClient,
         ITwitchPubSub twitchPublisher,
-        IServiceProvider serviceProvider,
+        RedemptionManager redemptionManager,
+        HermesApiClient hermesApiClient,
+        User user,
+        Configuration configuration,
+        TwitchBotAuth token,
         ILogger logger
     )
     {
         _redemptionManager = redemptionManager;
         _hermesApiClient = hermesApiClient;
-        _configuration = configuration;
-        _token = token;
         _client = twitchClient;
         _publisher = twitchPublisher;
-        _serviceProvider = serviceProvider;
+        _user = user;
+        _configuration = configuration;
+        _token = token;
         _logger = logger;
         _initialized = false;
         _broadcasterId = string.Empty;
@@ -88,7 +84,7 @@ public class TwitchApiClient
         }
         catch (HttpResponseException e)
         {
-            if (string.IsNullOrWhiteSpace(_configuration.Hermes?.Token))
+            if (string.IsNullOrWhiteSpace(_configuration.Hermes!.Token))
                 _logger.Error("No Hermes API key found. Enter it into the configuration file.");
             else
                 _logger.Error("Invalid Hermes API key. Double check the token. HTTP Error Code: " + e.HttpResponse.StatusCode);
@@ -112,7 +108,7 @@ public class TwitchApiClient
 
     public void InitializeClient(string username, IEnumerable<string> channels)
     {
-        ConnectionCredentials credentials = new ConnectionCredentials(username, _token?.AccessToken);
+        ConnectionCredentials credentials = new ConnectionCredentials(username, _token!.AccessToken);
         _client.Initialize(credentials, channels.Distinct().ToList());
 
         if (_initialized)
@@ -130,7 +126,7 @@ public class TwitchApiClient
 
         _client.OnConnected += async Task (object? s, OnConnectedArgs e) =>
         {
-            _logger.Information("-----------------------------------------------------------");
+            _logger.Information("Twitch API client connected.");
         };
 
         _client.OnIncorrectLogin += async Task (object? s, OnIncorrectLoginArgs e) =>
@@ -139,9 +135,10 @@ public class TwitchApiClient
 
             _logger.Information("Attempting to re-authorize.");
             await Authorize(_broadcasterId);
-            await _client.DisconnectAsync();
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            await _client.ConnectAsync();
+            _client.SetConnectionCredentials(new ConnectionCredentials(_user.TwitchUsername, _token!.AccessToken));
+
+            await Task.Delay(TimeSpan.FromSeconds(3));
+            await _client.ReconnectAsync();
         };
 
         _client.OnConnectionError += async Task (object? s, OnConnectionErrorArgs e) =>
@@ -156,6 +153,8 @@ public class TwitchApiClient
         {
             _logger.Error(e.Exception, "Twitch API client error.");
         };
+
+        _client.OnDisconnected += async Task (s, e) => _logger.Warning("Twitch API client disconnected.");
     }
 
     public void InitializePublisher()
@@ -171,38 +170,37 @@ public class TwitchApiClient
 
         _publisher.OnFollow += (s, e) =>
         {
-            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs") as OBSSocketClient;
-            if (_configuration.Twitch?.TtsWhenOffline != true && client?.Live == false)
-                return;
-
             _logger.Information($"New Follower [name: {e.DisplayName}][username: {e.Username}]");
         };
 
         _publisher.OnChannelPointsRewardRedeemed += async (s, e) =>
         {
-            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs") as OBSSocketClient;
-            if (_configuration.Twitch?.TtsWhenOffline != true && client?.Live == false)
-                return;
-
             _logger.Information($"Channel Point Reward Redeemed [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
 
-            var actions = _redemptionManager.Get(e.RewardRedeemed.Redemption.Reward.Id);
-            if (!actions.Any())
+            try
             {
-                _logger.Debug($"No redemable actions for this redeem was found [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
-                return;
-            }
-            _logger.Debug($"Found {actions.Count} actions for this Twitch channel point redemption [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
+                var actions = _redemptionManager.Get(e.RewardRedeemed.Redemption.Reward.Id);
+                if (!actions.Any())
+                {
+                    _logger.Debug($"No redemable actions for this redeem was found [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
+                    return;
+                }
+                _logger.Debug($"Found {actions.Count} actions for this Twitch channel point redemption [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
 
-            foreach (var action in actions)
-                try
-                {
-                    await _redemptionManager.Execute(action, e.RewardRedeemed.Redemption.User.DisplayName, long.Parse(e.RewardRedeemed.Redemption.User.Id));
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
-                }
+                foreach (var action in actions)
+                    try
+                    {
+                        await _redemptionManager.Execute(action, e.RewardRedeemed.Redemption.User.DisplayName, long.Parse(e.RewardRedeemed.Redemption.User.Id));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
+                    }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to fetch the redeemable actions for a redemption [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
+            }
         };
 
         _publisher.OnPubSubServiceClosed += async (s, e) =>

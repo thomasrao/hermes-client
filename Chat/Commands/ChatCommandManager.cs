@@ -1,8 +1,10 @@
 using System.Text.RegularExpressions;
+using CommonSocketLibrary.Abstract;
+using CommonSocketLibrary.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Chat.Groups.Permissions;
+using TwitchChatTTS.Hermes.Socket;
 using TwitchLib.Client.Models;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -10,28 +12,25 @@ namespace TwitchChatTTS.Chat.Commands
     public class ChatCommandManager
     {
         private IDictionary<string, ChatCommand> _commands;
-        private readonly TwitchBotAuth _token;
         private readonly User _user;
+        private readonly HermesSocketClient _hermes;
         private readonly IGroupPermissionManager _permissionManager;
-        private readonly IChatterGroupManager _chatterGroupManager;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger _logger;
         private string CommandStartSign { get; } = "!";
 
 
         public ChatCommandManager(
-            TwitchBotAuth token,
             User user,
+            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> socketClient,
             IGroupPermissionManager permissionManager,
-            IChatterGroupManager chatterGroupManager,
             IServiceProvider serviceProvider,
             ILogger logger
         )
         {
-            _token = token;
             _user = user;
+            _hermes = (socketClient as HermesSocketClient)!;
             _permissionManager = permissionManager;
-            _chatterGroupManager = chatterGroupManager;
             _serviceProvider = serviceProvider;
             _logger = logger;
 
@@ -71,8 +70,6 @@ namespace TwitchChatTTS.Chat.Commands
 
         public async Task<ChatCommandResult> Execute(string arg, ChatMessage message, IEnumerable<string> groups)
         {
-            if (_token.BroadcasterId == null)
-                return ChatCommandResult.Unknown;
             if (string.IsNullOrWhiteSpace(arg))
                 return ChatCommandResult.Unknown;
 
@@ -88,7 +85,6 @@ namespace TwitchChatTTS.Chat.Commands
                 .ToArray();
             string com = parts.First().Substring(CommandStartSign.Length).ToLower();
             string[] args = parts.Skip(1).ToArray();
-            long broadcasterId = long.Parse(_token.BroadcasterId);
 
             if (!_commands.TryGetValue(com, out ChatCommand? command) || command == null)
             {
@@ -107,7 +103,7 @@ namespace TwitchChatTTS.Chat.Commands
                     _logger.Debug($"Denied permission to use command [chatter id: {chatterId}][command: {com}]");
                     return ChatCommandResult.Permission;
                 }
-                else if (executable == null && !await command.CheckDefaultPermissions(message, broadcasterId))
+                else if (executable == null && !await command.CheckDefaultPermissions(message))
                 {
                     _logger.Debug($"Chatter is missing default permission to execute command named '{com}' [args: {arg}][chatter: {message.Username}][chatter id: {message.UserId}]");
                     return ChatCommandResult.Permission;
@@ -132,7 +128,7 @@ namespace TwitchChatTTS.Chat.Commands
 
             try
             {
-                await command.Execute(args, message, broadcasterId);
+                await command.Execute(args, message, _hermes);
             }
             catch (Exception e)
             {

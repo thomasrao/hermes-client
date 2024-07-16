@@ -12,16 +12,45 @@ namespace TwitchChatTTS.OBS.Socket.Manager
     {
         private readonly IDictionary<string, RequestData> _requests;
         private readonly IDictionary<string, long> _sourceIds;
+        private string? URL;
+
+        private readonly Configuration _configuration;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger _logger;
 
-        public OBSManager(IServiceProvider serviceProvider, ILogger logger)
+        public bool Connected { get; set; }
+        public bool Streaming { get; set; }
+
+
+        public OBSManager(Configuration configuration, IServiceProvider serviceProvider, ILogger logger)
         {
+            _configuration = configuration;
             _serviceProvider = serviceProvider;
             _logger = logger;
 
             _requests = new ConcurrentDictionary<string, RequestData>();
             _sourceIds = new Dictionary<string, long>();
+        }
+
+        public void Initialize()
+        {
+            _logger.Information($"Initializing OBS websocket client.");
+            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs");
+
+            client.OnConnected += (sender, e) =>
+            {
+                Connected = true;
+                _logger.Information("OBS websocket client connected.");
+            };
+
+            client.OnDisconnected += (sender, e) =>
+            {
+                Connected = false;
+                _logger.Information("OBS websocket client disconnected.");
+            };
+
+            if (!string.IsNullOrWhiteSpace(_configuration.Obs?.Host) && _configuration.Obs?.Port != null)
+                URL = $"ws://{_configuration.Obs.Host?.Trim()}:{_configuration.Obs.Port}";
         }
 
 
@@ -39,8 +68,35 @@ namespace TwitchChatTTS.OBS.Socket.Manager
             _sourceIds.Clear();
         }
 
+        public async Task Connect()
+        {
+            if (string.IsNullOrWhiteSpace(URL))
+            {
+                _logger.Warning("Lacking connection info for OBS websockets. Not connecting to OBS.");
+                return;
+            }
+
+            var client = _serviceProvider.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("obs");
+            _logger.Debug($"OBS websocket client attempting to connect to {URL}");
+
+            try
+            {
+                await client.ConnectAsync(URL);
+            }
+            catch (Exception)
+            {
+                _logger.Warning("Connecting to obs failed. Skipping obs websockets.");
+            }
+        }
+
         public async Task Send(IEnumerable<RequestMessage> messages)
         {
+            if (!Connected)
+            {
+                _logger.Warning("OBS websocket client is not connected. Not sending a message.");
+                return;
+            }
+
             string uid = GenerateUniqueIdentifier();
             var list = messages.ToList();
             _logger.Debug($"Sending OBS request batch of {list.Count} messages [obs request batch id: {uid}].");
@@ -60,6 +116,12 @@ namespace TwitchChatTTS.OBS.Socket.Manager
 
         public async Task Send(RequestMessage message, Action<Dictionary<string, object>>? callback = null)
         {
+            if (!Connected)
+            {
+                _logger.Warning("OBS websocket client is not connected. Not sending a message.");
+                return;
+            }
+
             string uid = GenerateUniqueIdentifier();
             _logger.Debug($"Sending an OBS request [type: {message.RequestType}][obs request id: {uid}]");
 
@@ -85,21 +147,26 @@ namespace TwitchChatTTS.OBS.Socket.Manager
             return null;
         }
 
+        public async Task UpdateStreamingState()
+        {
+            await Send(new RequestMessage("GetStreamStatus"));
+        }
+
         public async Task UpdateTransformation(string sceneName, string sceneItemName, Action<OBSTransformationData> action)
         {
             if (action == null)
                 return;
 
-            await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
+            await GetSceneItemByName(sceneName, sceneItemName, async (sceneItemId) =>
             {
-                var m2 = new RequestMessage("GetSceneItemTransform", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId } });
+                var m2 = new RequestMessage("GetSceneItemTransform", new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId } });
                 await Send(m2, async (d) =>
                 {
                     if (d == null || !d.TryGetValue("sceneItemTransform", out object? transformData) || transformData == null)
                         return;
 
                     _logger.Verbose($"Current transformation data [scene: {sceneName}][sceneItemName: {sceneItemName}][sceneItemId: {sceneItemId}][transform: {transformData}][obs request id: {m2.RequestId}]");
-                    var transform = JsonSerializer.Deserialize<OBSTransformationData>(transformData.ToString(), new JsonSerializerOptions()
+                    var transform = JsonSerializer.Deserialize<OBSTransformationData>(transformData.ToString()!, new JsonSerializerOptions()
                     {
                         PropertyNameCaseInsensitive = false,
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -126,20 +193,6 @@ namespace TwitchChatTTS.OBS.Socket.Manager
                         transform.PositionY = transform.PositionY + h / 2;
                     }
 
-                    // if (hasBounds)
-                    // {
-                    //     // Take care of bounds, for most cases.
-                    //     // 'Crop to Bounding Box' might be unsupported.
-                    //     w = transform.BoundsWidth;
-                    //     h = transform.BoundsHeight;
-                    //     a = transform.BoundsAlignment;
-                    // }
-                    // else if (transform.CropBottom + transform.CropLeft + transform.CropRight + transform.CropTop > 0)
-                    // {
-                    //     w -= transform.CropLeft + transform.CropRight;
-                    //     h -= transform.CropTop + transform.CropBottom;
-                    // }
-
                     action?.Invoke(transform);
 
                     var m3 = new RequestMessage("SetSceneItemTransform", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemTransform", transform } });
@@ -151,7 +204,7 @@ namespace TwitchChatTTS.OBS.Socket.Manager
 
         public async Task ToggleSceneItemVisibility(string sceneName, string sceneItemName)
         {
-            await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
+            await GetSceneItemByName(sceneName, sceneItemName, async (sceneItemId) =>
             {
                 var m1 = new RequestMessage("GetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId } });
                 await Send(m1, async (d) =>
@@ -167,7 +220,7 @@ namespace TwitchChatTTS.OBS.Socket.Manager
 
         public async Task UpdateSceneItemVisibility(string sceneName, string sceneItemName, bool isVisible)
         {
-            await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
+            await GetSceneItemByName(sceneName, sceneItemName, async (sceneItemId) =>
             {
                 var m = new RequestMessage("SetSceneItemEnabled", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemEnabled", isVisible } });
                 await Send(m);
@@ -176,7 +229,7 @@ namespace TwitchChatTTS.OBS.Socket.Manager
 
         public async Task UpdateSceneItemIndex(string sceneName, string sceneItemName, int index)
         {
-            await GetSceneItemById(sceneName, sceneItemName, async (sceneItemId) =>
+            await GetSceneItemByName(sceneName, sceneItemName, async (sceneItemId) =>
             {
                 var m = new RequestMessage("SetSceneItemIndex", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sceneItemId", sceneItemId }, { "sceneItemIndex", index } });
                 await Send(m);
@@ -220,7 +273,7 @@ namespace TwitchChatTTS.OBS.Socket.Manager
             _logger.Debug($"Fetched the list of OBS scene items in all groups [groups: {string.Join(", ", groupNames)}]");
         }
 
-        private async Task GetSceneItemById(string sceneName, string sceneItemName, Action<long> action)
+        private async Task GetSceneItemByName(string sceneName, string sceneItemName, Action<long> action)
         {
             if (_sourceIds.TryGetValue(sceneItemName, out long sourceId))
             {
@@ -244,18 +297,6 @@ namespace TwitchChatTTS.OBS.Socket.Manager
         private string GenerateUniqueIdentifier()
         {
             return Guid.NewGuid().ToString("N");
-        }
-
-        private void LogExceptions(Action action, string description)
-        {
-            try
-            {
-                action.Invoke();
-            }
-            catch (Exception e)
-            {
-                _logger.Error(e, description);
-            }
         }
     }
 

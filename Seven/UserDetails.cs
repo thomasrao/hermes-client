@@ -1,3 +1,5 @@
+using TwitchChatTTS.Chat.Emotes;
+
 namespace TwitchChatTTS.Seven
 {
     public class UserDetails

@@ -8,17 +8,6 @@ namespace TwitchChatTTS.OBS.Socket
 {
     public class OBSSocketClient : WebSocketClient
     {
-        private bool _live;
-        public bool? Live
-        {
-            get => Connected ? _live : null;
-            set
-            {
-                if (value.HasValue)
-                    _live = value.Value;
-            }
-        }
-
         public OBSSocketClient(
             ILogger logger,
             [FromKeyedServices("obs")] HandlerManager<WebSocketClient, IWebSocketHandler> handlerManager,
@@ -29,7 +18,6 @@ namespace TwitchChatTTS.OBS.Socket
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         })
         {
-            _live = false;
         }
     }
 }

@@ -2,3 +2,4 @@ appsettings.json
 tts.config.yml
 obj/
 bin/
+logs/

@@ -1,4 +1,5 @@
 using TwitchChatTTS.Chat.Commands.Parameters;
+using TwitchChatTTS.Hermes.Socket;
 using TwitchLib.Client.Models;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -27,7 +28,7 @@ namespace TwitchChatTTS.Chat.Commands
             }
         }
 
-        public abstract Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId);
-        public abstract Task Execute(IList<string> args, ChatMessage message, long broadcasterId);
+        public abstract Task<bool> CheckDefaultPermissions(ChatMessage message);
+        public abstract Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client);
     }
 }

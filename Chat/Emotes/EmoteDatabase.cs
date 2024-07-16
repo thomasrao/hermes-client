@@ -1,6 +1,6 @@
-namespace TwitchChatTTS.Seven
+namespace TwitchChatTTS.Chat.Emotes
 {
-    public class EmoteDatabase
+    public class EmoteDatabase : IEmoteDatabase
     {
         private readonly IDictionary<string, string> _emotes;
         public IDictionary<string, string> Emotes { get => _emotes.AsReadOnly(); }

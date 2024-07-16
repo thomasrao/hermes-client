@@ -23,7 +23,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             if (data is not IdentifiedMessage message || message == null)
                 return;
 
-            sender.Connected = true;
+            _manager.Connected = true;
             _logger.Information("Connected to OBS via rpc version " + message.NegotiatedRpcVersion + ".");
 
             try
@@ -34,6 +34,8 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             {
                 _logger.Error(e, "Failed to load OBS group info upon OBS identification.");
             }
+
+            await _manager.UpdateStreamingState();
         }
     }
 }

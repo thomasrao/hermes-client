@@ -2,6 +2,7 @@ using System.Text.Json;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Serilog;
+using TwitchChatTTS.Chat.Emotes;
 using TwitchChatTTS.Seven.Socket.Data;
 
 namespace TwitchChatTTS.Seven.Socket.Handlers
@@ -9,14 +10,14 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
     public class DispatchHandler : IWebSocketHandler
     {
         private readonly ILogger _logger;
-        private readonly EmoteDatabase _emotes;
+        private readonly IEmoteDatabase _emotes;
         private readonly object _lock = new object();
         public int OperationCode { get; } = 0;
 
-        public DispatchHandler(ILogger logger, EmoteDatabase emotes)
+        public DispatchHandler(IEmoteDatabase emotes, ILogger logger)
         {
-            _logger = logger;
             _emotes = emotes;
+            _logger = logger;
         }
 
         public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
@@ -53,12 +54,20 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                 {
                     if (removing)
                     {
-                        RemoveEmoteById(o.Id);
+                        if (_emotes.Get(o.Name) != o.Id) {
+                            _logger.Warning("Mismatched emote found while removing a 7tv emote.");
+                            continue;
+                        }
+                        _emotes.Remove(o.Name);
                         _logger.Information($"Removed 7tv emote [name: {o.Name}][id: {o.Id}]");
                     }
                     else if (updater != null)
                     {
-                        RemoveEmoteById(o.Id);
+                        if (_emotes.Get(o.Name) != o.Id) {
+                            _logger.Warning("Mismatched emote found while updating a 7tv emote.");
+                            continue;
+                        }
+                        _emotes.Remove(o.Name);
                         var update = updater(val);
 
                         var u = JsonSerializer.Deserialize<EmoteField>(update.ToString(), new JsonSerializerOptions()
@@ -84,21 +93,6 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                     }
                 }
             }
-        }
-
-        private void RemoveEmoteById(string id)
-        {
-            string? key = null;
-            foreach (var e in _emotes.Emotes)
-            {
-                if (e.Value == id)
-                {
-                    key = e.Key;
-                    break;
-                }
-            }
-            if (key != null)
-                _emotes.Remove(key);
         }
     }
 }

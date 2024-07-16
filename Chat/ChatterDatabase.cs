@@ -1,4 +1,4 @@
-namespace TwitchChatTTS.Seven
+namespace TwitchChatTTS.Chat
 {
     public class ChatterDatabase
     {

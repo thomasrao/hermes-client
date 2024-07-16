@@ -2,6 +2,7 @@ using System.Text.Json;
 using TwitchChatTTS.Helpers;
 using Serilog;
 using TwitchChatTTS.Seven;
+using TwitchChatTTS.Chat.Emotes;
 
 public class SevenApiClient
 {

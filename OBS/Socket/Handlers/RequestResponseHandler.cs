@@ -42,10 +42,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                 switch (request.RequestType)
                 {
                     case "GetOutputStatus":
-                        if (sender is not OBSSocketClient client)
-                            return;
-
-                        _logger.Debug($"Fetched stream's live status [live: {client.Live}][obs request id: {message.RequestId}]");
+                        _logger.Debug($"Fetched stream's live status [live: {_manager.Streaming}][obs request id: {message.RequestId}]");
                         break;
                     case "GetSceneItemId":
                         {
@@ -225,6 +222,24 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                                 return;
                             }
                             _logger.Debug($"Received response from OBS for sleeping [sleep: {sleepMillis}][obs request id: {message.RequestId}]");
+                            break;
+                        }
+                    case "GetStreamStatus":
+                        {
+                            if (message.ResponseData == null)
+                            {
+                                _logger.Warning($"OBS Response is null [obs request id: {message.RequestId}]");
+                                return;
+                            }
+                            if (!message.ResponseData.TryGetValue("outputActive", out object? outputActive) || outputActive == null)
+                            {
+                                _logger.Warning($"Failed to fetch the scene item visibility [obs request id: {message.RequestId}]");
+                                return;
+                            }
+
+                            _manager.Streaming = outputActive?.ToString()!.ToLower() == "true";
+                            requestData.ResponseValues = message.ResponseData;
+                            _logger.Information($"OBS is currently {(_manager.Streaming ? "" : "not ")}streaming.");
                             break;
                         }
                     default:

@@ -41,9 +41,9 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
             ];
             _reconnectDelay = [
                 1000,
-                0,
-                0,
-                0,
+                -1,
+                -1,
+                -1,
                 0,
                 3000,
                 1000,
@@ -77,19 +77,17 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
 
             if (string.IsNullOrWhiteSpace(_user.SevenEmoteSetId))
             {
-                _logger.Warning("Connected to 7tv websocket previously, but no emote set id was set.");
+                _logger.Warning("Could not find the 7tv emote set id. Not reconnecting.");
                 return;
             }
 
             var context = _serviceProvider.GetRequiredService<ReconnectContext>();
             if (_reconnectDelay[code] > 0)
                 await Task.Delay(_reconnectDelay[code]);
+            
+            var manager = _serviceProvider.GetRequiredService<SevenManager>();
+            await manager.Connect();
 
-            var base_url = $"@emote_set.*<object_id={_user.SevenEmoteSetId}>";
-            string url = $"{SevenApiClient.WEBSOCKET_URL}{base_url}";
-            _logger.Debug($"7tv websocket reconnecting to {url}.");
-
-            await sender.ConnectAsync(url);
             if (context.SessionId != null)
             {
                 await sender.Send(34, new ResumeMessage() { SessionId = context.SessionId });

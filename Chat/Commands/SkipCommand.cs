@@ -1,4 +1,5 @@
 using Serilog;
+using TwitchChatTTS.Hermes.Socket;
 using TwitchLib.Client.Models;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -15,12 +16,12 @@ namespace TwitchChatTTS.Chat.Commands
             _logger = logger;
         }
 
-        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message)
         {
             return message.IsModerator || message.IsVip || message.IsBroadcaster;
         }
 
-        public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
+        public override async Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client)
         {
             if (_ttsPlayer.Playing == null)
                 return;

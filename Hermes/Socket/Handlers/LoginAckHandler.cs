@@ -1,7 +1,6 @@
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Socket.Data;
-using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 
 namespace TwitchChatTTS.Hermes.Socket.Handlers
@@ -22,18 +21,23 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         {
             if (data is not LoginAckMessage message || message == null)
                 return;
-
             if (sender is not HermesSocketClient client)
                 return;
 
-            if (message.AnotherClient)
+            if (message.AnotherClient && client.LoggedIn)
             {
                 _logger.Warning("Another client has connected to the same account.");
                 return;
             }
+            if (client.LoggedIn)
+            {
+                _logger.Warning("Attempted to log in again while still logged in.");
+                return;
+            }
 
-            client.UserId = message.UserId;
+            _user.HermesUserId = message.UserId;
             _user.OwnerId = message.OwnerId;
+            client.LoggedIn = true;
             _logger.Information($"Logged in as {_user.TwitchUsername} {(message.WebLogin ? "via web" : "via TTS app")}.");
 
             await client.Send(3, new RequestMessage()
@@ -50,6 +54,12 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
             await client.Send(3, new RequestMessage()
             {
+                Type = "get_default_tts_voice",
+                Data = null
+            });
+
+            await client.Send(3, new RequestMessage()
+            {
                 Type = "get_chatter_ids",
                 Data = null
             });
@@ -59,6 +69,13 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 Type = "get_emotes",
                 Data = null
             });
+
+            await client.GetRedemptions();
+
+            await Task.Delay(TimeSpan.FromSeconds(3));
+
+            _logger.Information("TTS is now ready.");
+            client.Ready = true;
         }
     }
 }

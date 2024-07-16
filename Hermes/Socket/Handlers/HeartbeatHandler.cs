@@ -19,7 +19,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         {
             if (data is not HeartbeatMessage message || message == null)
                 return;
-
             if (sender is not HermesSocketClient client)
                 return;
 
@@ -28,11 +27,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             client.LastHeartbeatReceived = DateTime.UtcNow;
 
             if (message.Respond)
-                await sender.Send(0, new HeartbeatMessage()
-                {
-                    DateTime = DateTime.UtcNow,
-                    Respond = false
-                });
+                await client.SendHeartbeat();
         }
     }
 }

@@ -2,17 +2,21 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
+using HermesSocketLibrary.Requests.Callbacks;
 using HermesSocketLibrary.Requests.Messages;
 using HermesSocketLibrary.Socket.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using TwitchChatTTS.Seven;
+using TwitchChatTTS.Chat.Emotes;
+using TwitchChatTTS.Twitch.Redemptions;
 
 namespace TwitchChatTTS.Hermes.Socket.Handlers
 {
     public class RequestAckHandler : IWebSocketHandler
     {
         private User _user;
+        //private readonly RedemptionManager _redemptionManager;
+        private readonly ICallbackManager<HermesRequestData> _callbackManager;
         private readonly IServiceProvider _serviceProvider;
         private readonly JsonSerializerOptions _options;
         private readonly ILogger _logger;
@@ -21,9 +25,19 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
         public int OperationCode { get; } = 4;
 
-        public RequestAckHandler(User user, IServiceProvider serviceProvider, JsonSerializerOptions options, ILogger logger)
+
+        public RequestAckHandler(
+            User user,
+            //RedemptionManager redemptionManager,
+            ICallbackManager<HermesRequestData> callbackManager,
+            IServiceProvider serviceProvider,
+            JsonSerializerOptions options,
+            ILogger logger
+        )
         {
             _user = user;
+            //_redemptionManager = redemptionManager;
+            _callbackManager = callbackManager;
             _serviceProvider = serviceProvider;
             _options = options;
             _logger = logger;
@@ -34,10 +48,22 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             if (data is not RequestAckMessage message || message == null)
                 return;
             if (message.Request == null)
+            {
+                _logger.Warning("Received a Hermes request message without a proper request.");
                 return;
-            if (_user == null)
-                return;
+            }
 
+            HermesRequestData? hermesRequestData = null;
+            if (!string.IsNullOrEmpty(message.Request.RequestId))
+            {
+                hermesRequestData = _callbackManager.Take(message.Request.RequestId);
+                if (hermesRequestData == null)
+                    _logger.Warning($"Could not find callback for request [request id: {message.Request.RequestId}][type: {message.Request.Type}]");
+                else if (hermesRequestData.Data == null)
+                    hermesRequestData.Data = new Dictionary<string, object>();
+            }
+
+            _logger.Debug($"Received a Hermes request message [type: {message.Request.Type}][data: {string.Join(',', message.Request.Data?.Select(entry => entry.Key + '=' + entry.Value) ?? Array.Empty<string>())}]");
             if (message.Request.Type == "get_tts_voices")
             {
                 _logger.Verbose("Updating all available voices for TTS.");
@@ -54,16 +80,16 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             else if (message.Request.Type == "create_tts_user")
             {
                 _logger.Verbose("Adding new tts voice for user.");
-                if (!long.TryParse(message.Request.Data["user"].ToString(), out long chatterId))
+                if (!long.TryParse(message.Request.Data["chatter"].ToString(), out long chatterId))
                 {
                     _logger.Warning($"Failed to parse chatter id [chatter id: {message.Request.Data["chatter"]}]");
                     return;
                 }
                 string userId = message.Request.Data["user"].ToString();
-                string voice = message.Request.Data["voice"].ToString();
+                string voiceId = message.Request.Data["voice"].ToString();
 
-                _user.VoicesSelected.Add(chatterId, voice);
-                _logger.Information($"Added new TTS voice [voice: {voice}] for user [user id: {userId}]");
+                _user.VoicesSelected.Add(chatterId, voiceId);
+                _logger.Information($"Added new TTS voice [voice: {voiceId}] for user [user id: {userId}]");
             }
             else if (message.Request.Type == "update_tts_user")
             {
@@ -74,10 +100,10 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                     return;
                 }
                 string userId = message.Request.Data["user"].ToString();
-                string voice = message.Request.Data["voice"].ToString();
+                string voiceId = message.Request.Data["voice"].ToString();
 
-                _user.VoicesSelected[chatterId] = voice;
-                _logger.Information($"Updated TTS voice [voice: {voice}] for user [user id: {userId}]");
+                _user.VoicesSelected[chatterId] = voiceId;
+                _logger.Information($"Updated TTS voice [voice: {voiceId}] for user [user id: {userId}]");
             }
             else if (message.Request.Type == "create_tts_voice")
             {
@@ -99,7 +125,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             {
                 _logger.Verbose("Deleting tts voice.");
                 var voice = message.Request.Data["voice"].ToString();
-                if (!_user.VoicesAvailable.TryGetValue(voice, out string voiceName) || voiceName == null)
+                if (!_user.VoicesAvailable.TryGetValue(voice, out string? voiceName) || voiceName == null)
                     return;
 
                 lock (_voicesAvailableLock)
@@ -116,7 +142,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 string voiceId = message.Request.Data["idd"].ToString();
                 string voice = message.Request.Data["voice"].ToString();
 
-                if (!_user.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
+                if (!_user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) || voiceName == null)
                     return;
 
                 _user.VoicesAvailable[voiceId] = voice;
@@ -153,8 +179,9 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 if (emotes == null)
                     return;
 
-                var emoteDb = _serviceProvider.GetRequiredService<EmoteDatabase>();
+                var emoteDb = _serviceProvider.GetRequiredService<IEmoteDatabase>();
                 var count = 0;
+                var duplicateNames = 0;
                 foreach (var emote in emotes)
                 {
                     if (emoteDb.Get(emote.Name) == null)
@@ -162,8 +189,12 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                         emoteDb.Add(emote.Name, emote.Id);
                         count++;
                     }
+                    else
+                        duplicateNames++;
                 }
                 _logger.Information($"Fetched {count} emotes from various sources.");
+                if (duplicateNames > 0)
+                    _logger.Warning($"Found {duplicateNames} emotes with duplicate names.");
             }
             else if (message.Request.Type == "update_tts_voice_state")
             {
@@ -171,7 +202,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 string voiceId = message.Request.Data["voice"].ToString();
                 bool state = message.Request.Data["state"].ToString().ToLower() == "true";
 
-                if (!_user.VoicesAvailable.TryGetValue(voiceId, out string voiceName) || voiceName == null)
+                if (!_user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) || voiceName == null)
                 {
                     _logger.Warning($"Failed to find voice by id [id: {voiceId}]");
                     return;
@@ -183,6 +214,73 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                     _user.VoicesEnabled.Remove(voiceId);
                 _logger.Information($"Updated voice state [voice: {voiceName}][new state: {(state ? "enabled" : "disabled")}]");
             }
+            else if (message.Request.Type == "get_redemptions")
+            {
+                _logger.Verbose("Fetching all the redemptions.");
+                IEnumerable<Redemption>? redemptions = JsonSerializer.Deserialize<IEnumerable<Redemption>>(message.Data!.ToString()!, _options);
+                if (redemptions != null)
+                {
+                    _logger.Information($"Redemptions [count: {redemptions.Count()}] loaded.");
+                    if (hermesRequestData != null)
+                        hermesRequestData.Data!.Add("redemptions", redemptions);
+                }
+                else
+                    _logger.Information(message.Data.GetType().ToString());
+            }
+            else if (message.Request.Type == "get_redeemable_actions")
+            {
+                _logger.Verbose("Fetching all the redeemable actions.");
+                IEnumerable<RedeemableAction>? actions = JsonSerializer.Deserialize<IEnumerable<RedeemableAction>>(message.Data!.ToString()!, _options);
+                if (actions == null)
+                {
+                    _logger.Warning("Failed to read the redeemable actions for redemptions.");
+                    return;
+                }
+                if (hermesRequestData?.Data == null || !(hermesRequestData.Data["redemptions"] is IEnumerable<Redemption> redemptions))
+                {
+                    _logger.Warning("Failed to read the redemptions while updating redemption actions.");
+                    return;
+                }
+
+                _logger.Information($"Redeemable actions [count: {actions.Count()}] loaded.");
+                var redemptionManager = _serviceProvider.GetRequiredService<RedemptionManager>();
+                redemptionManager.Initialize(redemptions, actions.ToDictionary(a => a.Name, a => a));
+            }
+            else if (message.Request.Type == "get_default_tts_voice")
+            {
+                string? defaultVoice = message.Data?.ToString();
+                if (defaultVoice != null)
+                {
+                    _user.DefaultTTSVoice = defaultVoice;
+                    _logger.Information($"Default TTS voice was changed to '{defaultVoice}'.");
+                }
+            }
+            else if (message.Request.Type == "update_default_tts_voice")
+            {
+                if (message.Request.Data?.TryGetValue("voice", out object? voice) == true && voice is string v)
+                {
+                    _user.DefaultTTSVoice = v;
+                    _logger.Information($"Default TTS voice was changed to '{v}'.");
+                }
+                else
+                    _logger.Warning("Failed to update default TTS voice via request.");
+            }
+            else
+            {
+                _logger.Warning($"Found unknown request type when acknowledging [type: {message.Request.Type}]");
+            }
+
+            if (hermesRequestData != null)
+            {
+                _logger.Debug($"Callback was found for request [request id: {message.Request.RequestId}][type: {message.Request.Type}]");
+                hermesRequestData.Callback?.Invoke(hermesRequestData.Data);
+            }
         }
+    }
+
+    public class HermesRequestData
+    {
+        public Action<IDictionary<string, object>?>? Callback { get; set; }
+        public IDictionary<string, object>? Data { get; set; }
     }
 }

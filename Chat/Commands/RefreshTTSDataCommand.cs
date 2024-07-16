@@ -1,6 +1,9 @@
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using TwitchChatTTS.Chat.Commands.Parameters;
 using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Chat.Groups.Permissions;
+using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket.Manager;
 using TwitchChatTTS.Twitch.Redemptions;
 using TwitchLib.Client.Models;
@@ -34,20 +37,28 @@ namespace TwitchChatTTS.Chat.Commands
             _obsManager = obsManager;
             _hermesApi = hermesApi;
             _logger = logger;
+
+            AddParameter(new SimpleListedParameter([
+                "tts_voice_enabled",
+                "word_filters",
+                "selected_voices",
+                "default_voice",
+                "redemptions",
+                "obs_cache",
+                "permissions"
+            ]));
         }
 
-        public override async Task<bool> CheckDefaultPermissions(ChatMessage message, long broadcasterId)
+        public override async Task<bool> CheckDefaultPermissions(ChatMessage message)
         {
             return message.IsModerator || message.IsBroadcaster;
         }
 
-        public override async Task Execute(IList<string> args, ChatMessage message, long broadcasterId)
+        public override async Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client)
         {
-            var value = args.FirstOrDefault();
-            if (value == null)
-                return;
+            var value = args.First().ToLower();
 
-            switch (value.ToLower())
+            switch (value)
             {
                 case "tts_voice_enabled":
                     var voicesEnabled = await _hermesApi.FetchTTSEnabledVoices();
@@ -61,12 +72,6 @@ namespace TwitchChatTTS.Chat.Commands
                     var wordFilters = await _hermesApi.FetchTTSWordFilters();
                     _user.RegexFilters = wordFilters.ToList();
                     _logger.Information($"{_user.RegexFilters.Count()} TTS word filters.");
-                    break;
-                case "username_filters":
-                    var usernameFilters = await _hermesApi.FetchTTSUsernameFilters();
-                    _user.ChatterFilters = usernameFilters.ToDictionary(e => e.Username, e => e);
-                    _logger.Information($"{_user.ChatterFilters.Where(f => f.Value.Tag == "blacklisted").Count()} username(s) have been blocked.");
-                    _logger.Information($"{_user.ChatterFilters.Where(f => f.Value.Tag == "priority").Count()} user(s) have been prioritized.");
                     break;
                 case "selected_voices":
                     {
@@ -87,15 +92,8 @@ namespace TwitchChatTTS.Chat.Commands
                     break;
                 case "obs_cache":
                     {
-                        try
-                        {
-                            _obsManager.ClearCache();
-                            await _obsManager.GetGroupList(async groups => await _obsManager.GetGroupSceneItemList(groups));
-                        }
-                        catch (Exception e)
-                        {
-                            _logger.Error(e, "Failed to load OBS group info via command.");
-                        }
+                        _obsManager.ClearCache();
+                        await _obsManager.GetGroupList(async groups => await _obsManager.GetGroupSceneItemList(groups));
                         break;
                     }
                 case "permissions":

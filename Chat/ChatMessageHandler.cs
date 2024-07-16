@@ -1,17 +1,16 @@
 using System.Text.RegularExpressions;
 using TwitchLib.Client.Events;
-using TwitchChatTTS.OBS.Socket;
-using CommonSocketLibrary.Abstract;
-using CommonSocketLibrary.Common;
 using Serilog;
-using Microsoft.Extensions.DependencyInjection;
 using TwitchChatTTS;
-using TwitchChatTTS.Seven;
 using TwitchChatTTS.Chat.Commands;
 using TwitchChatTTS.Hermes.Socket;
-using HermesSocketLibrary.Socket.Data;
 using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Chat.Groups;
+using TwitchChatTTS.OBS.Socket.Manager;
+using TwitchChatTTS.Chat.Emotes;
+using Microsoft.Extensions.DependencyInjection;
+using CommonSocketLibrary.Common;
+using CommonSocketLibrary.Abstract;
 
 
 public class ChatMessageHandler
@@ -21,14 +20,14 @@ public class ChatMessageHandler
     private readonly ChatCommandManager _commands;
     private readonly IGroupPermissionManager _permissionManager;
     private readonly IChatterGroupManager _chatterGroupManager;
-    private readonly EmoteDatabase _emotes;
-    private readonly OBSSocketClient? _obsClient;
-    private readonly HermesSocketClient? _hermesClient;
+    private readonly IEmoteDatabase _emotes;
+    private readonly OBSManager _obsManager;
+    private readonly HermesSocketClient _hermes;
     private readonly Configuration _configuration;
 
     private readonly ILogger _logger;
 
-    private Regex sfxRegex;
+    private Regex _sfxRegex;
     private HashSet<long> _chatters;
 
     public HashSet<long> Chatters { get => _chatters; set => _chatters = value; }
@@ -40,9 +39,9 @@ public class ChatMessageHandler
         ChatCommandManager commands,
         IGroupPermissionManager permissionManager,
         IChatterGroupManager chatterGroupManager,
-        EmoteDatabase emotes,
-        [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obsClient,
-        [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermesClient,
+        IEmoteDatabase emotes,
+        OBSManager obsManager,
+        [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
         Configuration configuration,
         ILogger logger
     )
@@ -53,66 +52,66 @@ public class ChatMessageHandler
         _permissionManager = permissionManager;
         _chatterGroupManager = chatterGroupManager;
         _emotes = emotes;
-        _obsClient = obsClient as OBSSocketClient;
-        _hermesClient = hermesClient as HermesSocketClient;
+        _obsManager = obsManager;
+        _hermes = (hermes as HermesSocketClient)!;
         _configuration = configuration;
         _logger = logger;
 
         _chatters = new HashSet<long>();
-        sfxRegex = new Regex(@"\(([A-Za-z0-9_-]+)\)");
+        _sfxRegex = new Regex(@"\(([A-Za-z0-9_-]+)\)");
     }
 
 
     public async Task<MessageResult> Handle(OnMessageReceivedArgs e)
     {
-        if (_obsClient == null || _hermesClient == null || _obsClient.Connected && _chatters == null)
-            return new MessageResult(MessageStatus.NotReady, -1, -1);
-        if (_configuration.Twitch?.TtsWhenOffline != true && _obsClient.Live == false)
-            return new MessageResult(MessageStatus.NotReady, -1, -1);
-
         var m = e.ChatMessage;
+
+        if (!_hermes.Ready)
+        {
+            _logger.Debug($"TTS is not yet ready. Ignoring chat messages [message id: {m.Id}]");
+            return new MessageResult(MessageStatus.NotReady, -1, -1);
+        }
+        if (_configuration.Twitch?.TtsWhenOffline != true && !_obsManager.Streaming)
+        {
+            _logger.Debug($"OBS is not streaming. Ignoring chat messages [message id: {m.Id}]");
+            return new MessageResult(MessageStatus.NotReady, -1, -1);
+        }
+
+
         var msg = e.ChatMessage.Message;
         var chatterId = long.Parse(m.UserId);
         var tasks = new List<Task>();
-
-        var permissionPath = "tts.chat.messages.read";
-        if (!string.IsNullOrWhiteSpace(m.CustomRewardId))
-            permissionPath = "tts.chat.redemptions.read";
 
         var checks = new bool[] { true, m.IsSubscriber, m.IsVip, m.IsModerator, m.IsBroadcaster };
         var defaultGroups = new string[] { "everyone", "subscribers", "vip", "moderators", "broadcaster" };
         var customGroups = _chatterGroupManager.GetGroupNamesFor(chatterId);
         var groups = defaultGroups.Where((e, i) => checks[i]).Union(customGroups);
 
-        var permission = chatterId == _user.OwnerId ? true : _permissionManager.CheckIfAllowed(groups, permissionPath);
-        var blocked = permission != true;
-        if (!blocked || m.IsBroadcaster)
+        try
         {
-            try
-            {
-                var commandResult = await _commands.Execute(msg, m, groups);
-                if (commandResult != ChatCommandResult.Unknown)
-                    return new MessageResult(MessageStatus.Command, -1, -1);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed executing a chat command [message: {msg}][chatter: {m.Username}][chatter id: {m.UserId}][message id: {m.Id}]");
-            }
+            var commandResult = await _commands.Execute(msg, m, groups);
+            if (commandResult != ChatCommandResult.Unknown)
+                return new MessageResult(MessageStatus.Command, -1, -1);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, $"Failed executing a chat command [message: {msg}][chatter: {m.Username}][chatter id: {m.UserId}][message id: {m.Id}]");
         }
 
-        if (blocked)
+        var permissionPath = "tts.chat.messages.read";
+        if (!string.IsNullOrWhiteSpace(m.CustomRewardId))
+            permissionPath = "tts.chat.redemptions.read";
+
+        var permission = chatterId == _user.OwnerId ? true : _permissionManager.CheckIfAllowed(groups, permissionPath);
+        if (permission != true)
         {
             _logger.Debug($"Blocked message by {m.Username}: {msg}");
             return new MessageResult(MessageStatus.Blocked, -1, -1);
         }
 
-        if (_obsClient.Connected && !_chatters.Contains(chatterId))
+        if (_obsManager.Streaming && !_chatters.Contains(chatterId))
         {
-            tasks.Add(_hermesClient.Send(6, new ChatterMessage()
-            {
-                Id = chatterId,
-                Name = m.Username
-            }));
+            tasks.Add(_hermes.SendChatterDetails(chatterId, m.Username));
             _chatters.Add(chatterId);
         }
 
@@ -149,11 +148,8 @@ public class ChatMessageHandler
             if (wordCounter[w] <= 4 && (emoteId == null || totalEmoteUsed <= 5))
                 filteredMsg += w + " ";
         }
-        if (_obsClient.Connected && newEmotes.Any())
-            tasks.Add(_hermesClient.Send(7, new EmoteDetailsMessage()
-            {
-                Emotes = newEmotes
-            }));
+        if (_obsManager.Streaming && newEmotes.Any())
+            tasks.Add(_hermes.SendEmoteDetails(newEmotes));
         msg = filteredMsg;
 
         // Replace filtered words.
@@ -231,7 +227,7 @@ public class ChatMessageHandler
             return;
 
         var m = e.ChatMessage;
-        var parts = sfxRegex.Split(message);
+        var parts = _sfxRegex.Split(message);
         var badgesString = string.Join(", ", e.ChatMessage.Badges.Select(b => b.Key + " = " + b.Value));
 
         if (parts.Length == 1)
@@ -251,7 +247,7 @@ public class ChatMessageHandler
             return;
         }
 
-        var sfxMatches = sfxRegex.Matches(message);
+        var sfxMatches = _sfxRegex.Matches(message);
         var sfxStart = sfxMatches.FirstOrDefault()?.Index ?? message.Length;
 
         for (var i = 0; i < sfxMatches.Count; i++)
