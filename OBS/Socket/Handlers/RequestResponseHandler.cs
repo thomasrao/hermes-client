@@ -3,19 +3,18 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Serilog;
 using TwitchChatTTS.OBS.Socket.Data;
-using TwitchChatTTS.OBS.Socket.Manager;
 
 namespace TwitchChatTTS.OBS.Socket.Handlers
 {
     public class RequestResponseHandler : IWebSocketHandler
     {
-        private readonly OBSManager _manager;
         private readonly ILogger _logger;
         public int OperationCode { get; } = 7;
 
-        public RequestResponseHandler(OBSManager manager, ILogger logger)
+        public RequestResponseHandler(
+            ILogger logger
+        )
         {
-            _manager = manager;
             _logger = logger;
         }
 
@@ -23,10 +22,12 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
         {
             if (data is not RequestResponseMessage message || message == null)
                 return;
+            if (sender is not OBSSocketClient obs)
+                return;
 
             _logger.Debug($"Received an OBS request response [obs request id: {message.RequestId}]");
 
-            var requestData = _manager.Take(message.RequestId);
+            var requestData = obs.Take(message.RequestId);
             if (requestData == null)
             {
                 _logger.Warning($"OBS Request Response not being processed: request not stored [obs request id: {message.RequestId}]");
@@ -42,7 +43,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                 switch (request.RequestType)
                 {
                     case "GetOutputStatus":
-                        _logger.Debug($"Fetched stream's live status [live: {_manager.Streaming}][obs request id: {message.RequestId}]");
+                        _logger.Debug($"Fetched stream's live status [live: {obs.Streaming}][obs request id: {message.RequestId}]");
                         break;
                     case "GetSceneItemId":
                         {
@@ -206,7 +207,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                             }
 
                             foreach (var sceneItem in sceneItems)
-                                _manager.AddSourceId(sceneItem.SourceName, sceneItem.SceneItemId);
+                                obs.AddSourceId(sceneItem.SourceName, sceneItem.SceneItemId);
 
                             requestData.ResponseValues = new Dictionary<string, object>()
                             {
@@ -237,9 +238,9 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
                                 return;
                             }
 
-                            _manager.Streaming = outputActive?.ToString()!.ToLower() == "true";
+                            obs.Streaming = outputActive?.ToString()!.ToLower() == "true";
                             requestData.ResponseValues = message.ResponseData;
-                            _logger.Information($"OBS is currently {(_manager.Streaming ? "" : "not ")}streaming.");
+                            _logger.Information($"OBS is currently {(obs.Streaming ? "" : "not ")}streaming.");
                             break;
                         }
                     default:

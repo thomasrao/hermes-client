@@ -1,8 +1,8 @@
 namespace TwitchChatTTS.Chat.Commands.Parameters
 {
-    public class UnvalidatedParameter : ChatCommandParameter
+    public class UnvalidatedParameter : CommandParameter
     {
-        public UnvalidatedParameter(bool optional = false) : base("TTS Voice Name", "Name of a TTS voice", optional)
+        public UnvalidatedParameter(string name, bool optional = false) : base(name, optional)
         {
         }
 

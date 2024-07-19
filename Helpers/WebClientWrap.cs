@@ -23,7 +23,7 @@ namespace TwitchChatTTS.Helpers
             _client.DefaultRequestHeaders.Add(key, value);
         }
 
-        public async Task<T?> GetJson<T>(string uri, JsonSerializerOptions options = null)
+        public async Task<T?> GetJson<T>(string uri, JsonSerializerOptions? options = null)
         {
             var response = await _client.GetAsync(uri);
             return JsonSerializer.Deserialize<T>(await response.Content.ReadAsStreamAsync(), options ?? _options);

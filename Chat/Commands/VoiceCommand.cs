@@ -1,58 +1,71 @@
-using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using TwitchChatTTS.Chat.Commands.Parameters;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchLib.Client.Models;
+using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
 {
-    public class VoiceCommand : ChatCommand
+    public class VoiceCommand : IChatCommand
     {
         private readonly User _user;
         private readonly ILogger _logger;
 
-        public VoiceCommand(
-            [FromKeyedServices("parameter-ttsvoicename")] ChatCommandParameter ttsVoiceParameter,
-            User user,
-            ILogger logger
-        ) : base("voice", "Select a TTS voice as the default for that user.")
+        public VoiceCommand(User user, ILogger logger)
         {
             _user = user;
             _logger = logger;
-
-            AddParameter(ttsVoiceParameter);
         }
 
-        public override async Task<bool> CheckDefaultPermissions(ChatMessage message)
+        public string Name => "voice";
+
+        public void Build(ICommandBuilder builder)
         {
-            return message.IsModerator || message.IsBroadcaster || message.IsSubscriber || message.Bits >= 100;
+            builder.CreateCommandTree(Name, b =>
+            {
+                b.CreateVoiceNameParameter("voiceName", true)
+                    .CreateCommand(new TTSVoiceSelector(_user, _logger));
+            });
         }
 
-        public override async Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client)
+        private sealed class TTSVoiceSelector : IChatPartialCommand
         {
-            if (_user == null || _user.VoicesSelected == null || _user.VoicesEnabled == null)
-                return;
+            private readonly User _user;
+            private readonly ILogger _logger;
 
-            long chatterId = long.Parse(message.UserId);
-            var voiceName = args.First().ToLower();
-            var voice = _user.VoicesAvailable.First(v => v.Value.ToLower() == voiceName);
-            var enabled = _user.VoicesEnabled.Contains(voice.Value);
+            public bool AcceptCustomPermission { get => true; }
 
-            if (!enabled)
+            public TTSVoiceSelector(User user, ILogger logger)
             {
-                _logger.Information($"Voice is disabled. Cannot switch to that voice [voice: {voice.Value}][username: {message.Username}]");
-                return;
+                _user = user;
+                _logger = logger;
             }
 
-            if (_user.VoicesSelected.ContainsKey(chatterId))
+
+            public bool CheckDefaultPermissions(ChatMessage message)
             {
-                await client.UpdateTTSUser(chatterId, voice.Key);
-                _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {message.Username}][reason: command]");
+                return message.IsModerator || message.IsBroadcaster || message.IsSubscriber || message.Bits >= 100;
             }
-            else
+
+            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
             {
-                await client.CreateTTSUser(chatterId, voice.Key);
-                _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {message.Username}][reason: command]");
+                if (_user == null || _user.VoicesSelected == null)
+                    return;
+
+                long chatterId = long.Parse(message.UserId);
+                var voiceName = values["voiceName"];
+                var voiceNameLower = voiceName.ToLower();
+                var voice = _user.VoicesAvailable.First(v => v.Value.ToLower() == voiceNameLower);
+
+                if (_user.VoicesSelected.ContainsKey(chatterId))
+                {
+                    await client.UpdateTTSUser(chatterId, voice.Key);
+                    _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {message.Username}][reason: command]");
+                }
+                else
+                {
+                    await client.CreateTTSUser(chatterId, voice.Key);
+                    _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {message.Username}][reason: command]");
+                }
             }
         }
     }

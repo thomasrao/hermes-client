@@ -10,7 +10,6 @@ using YamlDotNet.Serialization.NamingConventions;
 using TwitchChatTTS.Seven.Socket;
 using TwitchChatTTS.OBS.Socket.Handlers;
 using TwitchChatTTS.Seven.Socket.Handlers;
-using TwitchChatTTS.Seven.Socket.Context;
 using TwitchLib.Client.Interfaces;
 using TwitchLib.Client;
 using TwitchLib.PubSub.Interfaces;
@@ -31,6 +30,7 @@ using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Chat.Emotes;
 using HermesSocketLibrary.Requests.Callbacks;
+using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -70,21 +70,16 @@ s.AddSingleton<JsonSerializerOptions>(new JsonSerializerOptions()
 });
 
 // Command parameters
-s.AddKeyedSingleton<ChatCommandParameter, TTSVoiceNameParameter>("parameter-ttsvoicename");
-s.AddKeyedSingleton<ChatCommandParameter, UnvalidatedParameter>("parameter-unvalidated");
-s.AddKeyedSingleton<ChatCommandParameter, SimpleListedParameter>("parameter-simplelisted");
-s.AddKeyedSingleton<ChatCommand, SkipAllCommand>("command-skipall");
-s.AddKeyedSingleton<ChatCommand, SkipCommand>("command-skip");
-s.AddKeyedSingleton<ChatCommand, VoiceCommand>("command-voice");
-s.AddKeyedSingleton<ChatCommand, AddTTSVoiceCommand>("command-addttsvoice");
-s.AddKeyedSingleton<ChatCommand, RemoveTTSVoiceCommand>("command-removettsvoice");
-s.AddKeyedSingleton<ChatCommand, RefreshTTSDataCommand>("command-refreshttsdata");
-s.AddKeyedSingleton<ChatCommand, OBSCommand>("command-obs");
-s.AddKeyedSingleton<ChatCommand, TTSCommand>("command-tts");
-s.AddKeyedSingleton<ChatCommand, VersionCommand>("command-version");
+s.AddSingleton<IChatCommand, SkipCommand>();
+s.AddSingleton<IChatCommand, VoiceCommand>();
+s.AddSingleton<IChatCommand, RefreshCommand>();
+s.AddSingleton<IChatCommand, OBSCommand>();
+s.AddSingleton<IChatCommand, TTSCommand>();
+s.AddSingleton<IChatCommand, VersionCommand>();
+s.AddSingleton<ICommandBuilder, CommandBuilder>();
 s.AddSingleton<IChatterGroupManager, ChatterGroupManager>();
 s.AddSingleton<IGroupPermissionManager, GroupPermissionManager>();
-s.AddSingleton<ChatCommandManager>();
+s.AddSingleton<CommandManager>();
 
 s.AddSingleton<TTSPlayer>();
 s.AddSingleton<ChatMessageHandler>();
@@ -100,48 +95,32 @@ s.AddSingleton<SevenApiClient>();
 s.AddSingleton<IEmoteDatabase, EmoteDatabase>();
 
 // OBS websocket
-s.AddSingleton<OBSManager>();
-s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("obs-hello");
-s.AddKeyedSingleton<IWebSocketHandler, IdentifiedHandler>("obs-identified");
-s.AddKeyedSingleton<IWebSocketHandler, RequestResponseHandler>("obs-requestresponse");
-s.AddKeyedSingleton<IWebSocketHandler, RequestBatchResponseHandler>("obs-requestbatchresponse");
-s.AddKeyedSingleton<IWebSocketHandler, EventMessageHandler>("obs-eventmessage");
+s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("obs");
+s.AddKeyedSingleton<IWebSocketHandler, IdentifiedHandler>("obs");
+s.AddKeyedSingleton<IWebSocketHandler, RequestResponseHandler>("obs");
+s.AddKeyedSingleton<IWebSocketHandler, RequestBatchResponseHandler>("obs");
+s.AddKeyedSingleton<IWebSocketHandler, EventMessageHandler>("obs");
 
-s.AddKeyedSingleton<HandlerManager<WebSocketClient, IWebSocketHandler>, OBSHandlerManager>("obs");
-s.AddKeyedSingleton<HandlerTypeManager<WebSocketClient, IWebSocketHandler>, OBSHandlerTypeManager>("obs");
+s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, OBSMessageTypeManager>("obs");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, OBSSocketClient>("obs");
 
 // 7tv websocket
-s.AddTransient(sp =>
-{
-    var logger = sp.GetRequiredService<ILogger>();
-    var client = sp.GetRequiredKeyedService<SocketClient<WebSocketMessage>>("7tv") as SevenSocketClient;
-    if (client == null)
-        return new ReconnectContext() { SessionId = null };
-    if (client.ConnectionDetails == null)
-        return new ReconnectContext() { SessionId = null };
-    return new ReconnectContext() { SessionId = client.ConnectionDetails.SessionId };
-});
-s.AddKeyedSingleton<IWebSocketHandler, SevenHelloHandler>("7tv-sevenhello");
-s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("7tv-hello");
-s.AddKeyedSingleton<IWebSocketHandler, DispatchHandler>("7tv-dispatch");
-s.AddKeyedSingleton<IWebSocketHandler, ReconnectHandler>("7tv-reconnect");
-s.AddKeyedSingleton<IWebSocketHandler, ErrorHandler>("7tv-error");
-s.AddKeyedSingleton<IWebSocketHandler, EndOfStreamHandler>("7tv-endofstream");
+s.AddKeyedSingleton<IWebSocketHandler, SevenHelloHandler>("7tv");
+s.AddKeyedSingleton<IWebSocketHandler, DispatchHandler>("7tv");
+s.AddKeyedSingleton<IWebSocketHandler, ReconnectHandler>("7tv");
+s.AddKeyedSingleton<IWebSocketHandler, ErrorHandler>("7tv");
+s.AddKeyedSingleton<IWebSocketHandler, EndOfStreamHandler>("7tv");
 
-s.AddSingleton<SevenManager>();
-s.AddKeyedSingleton<HandlerManager<WebSocketClient, IWebSocketHandler>, SevenHandlerManager>("7tv");
-s.AddKeyedSingleton<HandlerTypeManager<WebSocketClient, IWebSocketHandler>, SevenHandlerTypeManager>("7tv");
+s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, SevenMessageTypeManager>("7tv");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");
 
 // hermes websocket
-s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes-heartbeat");
-s.AddKeyedSingleton<IWebSocketHandler, LoginAckHandler>("hermes-loginack");
-s.AddKeyedSingleton<IWebSocketHandler, RequestAckHandler>("hermes-requestack");
-s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes-error");
+s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes");
+s.AddKeyedSingleton<IWebSocketHandler, LoginAckHandler>("hermes");
+s.AddKeyedSingleton<IWebSocketHandler, RequestAckHandler>("hermes");
+//s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes");
 
-s.AddKeyedSingleton<HandlerManager<WebSocketClient, IWebSocketHandler>, HermesHandlerManager>("hermes");
-s.AddKeyedSingleton<HandlerTypeManager<WebSocketClient, IWebSocketHandler>, HermesHandlerTypeManager>("hermes");
+s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, HermesMessageTypeManager>("hermes");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, HermesSocketClient>("hermes");
 
 s.AddHostedService<TTS>();

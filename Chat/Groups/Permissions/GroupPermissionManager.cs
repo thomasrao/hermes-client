@@ -37,8 +37,7 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
 
         public void Clear()
         {
-            if (_root.Children != null)
-                _root.Children.Clear();
+            _root.Clear();
         }
 
         public bool Remove(string path)
@@ -125,6 +124,11 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
             if (_children == null)
                 _children = new List<PermissionNode>();
             _children.Add(child);
+        }
+
+        internal void Clear() {
+            if (_children != null)
+                _children.Clear();
         }
 
         public void Remove(string name)

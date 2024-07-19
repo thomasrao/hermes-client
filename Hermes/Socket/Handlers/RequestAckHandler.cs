@@ -8,6 +8,8 @@ using HermesSocketLibrary.Socket.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Chat.Emotes;
+using TwitchChatTTS.Chat.Groups;
+using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Twitch.Redemptions;
 
 namespace TwitchChatTTS.Hermes.Socket.Handlers
@@ -28,7 +30,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
         public RequestAckHandler(
             User user,
-            //RedemptionManager redemptionManager,
             ICallbackManager<HermesRequestData> callbackManager,
             IServiceProvider serviceProvider,
             JsonSerializerOptions options,
@@ -36,7 +37,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         )
         {
             _user = user;
-            //_redemptionManager = redemptionManager;
             _callbackManager = callbackManager;
             _serviceProvider = serviceProvider;
             _options = options;
@@ -66,7 +66,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             _logger.Debug($"Received a Hermes request message [type: {message.Request.Type}][data: {string.Join(',', message.Request.Data?.Select(entry => entry.Key + '=' + entry.Value) ?? Array.Empty<string>())}]");
             if (message.Request.Type == "get_tts_voices")
             {
-                _logger.Verbose("Updating all available voices for TTS.");
                 var voices = JsonSerializer.Deserialize<IEnumerable<VoiceDetails>>(message.Data.ToString(), _options);
                 if (voices == null)
                     return;
@@ -79,7 +78,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "create_tts_user")
             {
-                _logger.Verbose("Adding new tts voice for user.");
                 if (!long.TryParse(message.Request.Data["chatter"].ToString(), out long chatterId))
                 {
                     _logger.Warning($"Failed to parse chatter id [chatter id: {message.Request.Data["chatter"]}]");
@@ -93,7 +91,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "update_tts_user")
             {
-                _logger.Verbose("Updating user's voice");
                 if (!long.TryParse(message.Request.Data["chatter"].ToString(), out long chatterId))
                 {
                     _logger.Warning($"Failed to parse chatter id [chatter id: {message.Request.Data["chatter"]}]");
@@ -107,7 +104,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "create_tts_voice")
             {
-                _logger.Verbose("Creating new tts voice.");
                 string? voice = message.Request.Data["voice"].ToString();
                 string? voiceId = message.Data.ToString();
                 if (voice == null || voiceId == null)
@@ -123,7 +119,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "delete_tts_voice")
             {
-                _logger.Verbose("Deleting tts voice.");
                 var voice = message.Request.Data["voice"].ToString();
                 if (!_user.VoicesAvailable.TryGetValue(voice, out string? voiceName) || voiceName == null)
                     return;
@@ -138,7 +133,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "update_tts_voice")
             {
-                _logger.Verbose("Updating TTS voice.");
                 string voiceId = message.Request.Data["idd"].ToString();
                 string voice = message.Request.Data["voice"].ToString();
 
@@ -150,7 +144,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "get_tts_users")
             {
-                _logger.Verbose("Updating all chatters' selected voice.");
                 var users = JsonSerializer.Deserialize<IDictionary<long, string>>(message.Data.ToString(), _options);
                 if (users == null)
                     return;
@@ -163,7 +156,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "get_chatter_ids")
             {
-                _logger.Verbose("Fetching all chatters' id.");
                 var chatters = JsonSerializer.Deserialize<IEnumerable<long>>(message.Data.ToString(), _options);
                 if (chatters == null)
                     return;
@@ -174,7 +166,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "get_emotes")
             {
-                _logger.Verbose("Updating emotes.");
                 var emotes = JsonSerializer.Deserialize<IEnumerable<EmoteInfo>>(message.Data.ToString(), _options);
                 if (emotes == null)
                     return;
@@ -196,9 +187,78 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 if (duplicateNames > 0)
                     _logger.Warning($"Found {duplicateNames} emotes with duplicate names.");
             }
+            else if (message.Request.Type == "get_enabled_tts_voices")
+            {
+                var enabledTTSVoices = JsonSerializer.Deserialize<IEnumerable<string>>(message.Data.ToString(), _options);
+                if (enabledTTSVoices == null)
+                {
+                    _logger.Error("Failed to load enabled tts voices.");
+                    return;
+                }
+
+                if (_user.VoicesEnabled == null)
+                    _user.VoicesEnabled = enabledTTSVoices.ToHashSet();
+                else
+                    _user.VoicesEnabled.Clear();
+                foreach (var voice in enabledTTSVoices)
+                    _user.VoicesEnabled.Add(voice);
+                _logger.Information($"TTS voices [count: {_user.VoicesEnabled.Count}] have been enabled.");
+            }
+            else if (message.Request.Type == "get_permissions")
+            {
+                var groupInfo = JsonSerializer.Deserialize<GroupInfo>(message.Data.ToString(), _options);
+                if (groupInfo == null)
+                {
+                    _logger.Error("Failed to load groups & permissions.");
+                    return;
+                }
+
+                var chatterGroupManager = _serviceProvider.GetRequiredService<IChatterGroupManager>();
+                var permissionManager = _serviceProvider.GetRequiredService<IGroupPermissionManager>();
+
+                permissionManager.Clear();
+                chatterGroupManager.Clear();
+
+                var groupsById = groupInfo.Groups.ToDictionary(g => g.Id, g => g);
+                foreach (var group in groupInfo.Groups)
+                    chatterGroupManager.Add(group);
+
+                foreach (var permission in groupInfo.GroupPermissions)
+                {
+                    _logger.Debug($"Adding group permission [permission id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}][allow: {permission.Allow?.ToString() ?? "null"}]");
+                    if (!groupsById.TryGetValue(permission.GroupId, out var group))
+                    {
+                        _logger.Warning($"Failed to find group by id [permission id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}]");
+                        continue;
+                    }
+
+                    
+                    var path = $"{group.Name}.{permission.Path}";
+                    permissionManager.Set(path, permission.Allow);
+                    _logger.Debug($"Added group permission [id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}]");
+                }
+
+                _logger.Information($"Groups [count: {groupInfo.Groups.Count()}] & Permissions [count: {groupInfo.GroupPermissions.Count()}] have been loaded.");
+
+                foreach (var chatter in groupInfo.GroupChatters)
+                    if (groupsById.TryGetValue(chatter.GroupId, out var group))
+                        chatterGroupManager.Add(chatter.ChatterId, group.Name);
+                _logger.Information($"Users in each group [count: {groupInfo.GroupChatters.Count()}] have been loaded.");
+            }
+            else if (message.Request.Type == "get_tts_word_filters")
+            {
+                var wordFilters = JsonSerializer.Deserialize<IEnumerable<TTSWordFilter>>(message.Data.ToString(), _options);
+                if (wordFilters == null)
+                {
+                    _logger.Error("Failed to load word filters.");
+                    return;
+                }
+
+                _user.RegexFilters = wordFilters.ToList();
+                _logger.Information($"TTS word filters [count: {_user.RegexFilters.Count}] have been refreshed.");
+            }
             else if (message.Request.Type == "update_tts_voice_state")
             {
-                _logger.Verbose("Updating TTS voice states.");
                 string voiceId = message.Request.Data["voice"].ToString();
                 bool state = message.Request.Data["state"].ToString().ToLower() == "true";
 
@@ -216,7 +276,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "get_redemptions")
             {
-                _logger.Verbose("Fetching all the redemptions.");
                 IEnumerable<Redemption>? redemptions = JsonSerializer.Deserialize<IEnumerable<Redemption>>(message.Data!.ToString()!, _options);
                 if (redemptions != null)
                 {
@@ -229,7 +288,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             }
             else if (message.Request.Type == "get_redeemable_actions")
             {
-                _logger.Verbose("Fetching all the redeemable actions.");
                 IEnumerable<RedeemableAction>? actions = JsonSerializer.Deserialize<IEnumerable<RedeemableAction>>(message.Data!.ToString()!, _options);
                 if (actions == null)
                 {

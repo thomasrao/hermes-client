@@ -19,7 +19,6 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
         {
             if (data is not SevenHelloMessage message || message == null)
                 return;
-
             if (sender is not SevenSocketClient seven || seven == null)
                 return;
 

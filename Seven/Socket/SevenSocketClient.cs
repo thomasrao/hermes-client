@@ -9,19 +9,133 @@ namespace TwitchChatTTS.Seven.Socket
 {
     public class SevenSocketClient : WebSocketClient
     {
+        private readonly User _user;
+        private readonly string[] _errorCodes;
+        private readonly int[] _reconnectDelay;
+        private string? URL;
+
+        public bool Connected { get; set; }
+
         public SevenHelloMessage? ConnectionDetails { get; set; }
 
         public SevenSocketClient(
-            ILogger logger,
-            [FromKeyedServices("7tv")] HandlerManager<WebSocketClient, IWebSocketHandler> handlerManager,
-            [FromKeyedServices("7tv")] HandlerTypeManager<WebSocketClient, IWebSocketHandler> typeManager
-        ) : base(logger, handlerManager, typeManager, new JsonSerializerOptions()
+            User user,
+            [FromKeyedServices("7tv")] IEnumerable<IWebSocketHandler> handlers,
+            [FromKeyedServices("7tv")] MessageTypeManager<IWebSocketHandler> typeManager,
+            ILogger logger
+        ) : base(handlers, typeManager, new JsonSerializerOptions()
         {
             PropertyNameCaseInsensitive = false,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-        })
+        }, logger)
         {
+            _user = user;
             ConnectionDetails = null;
+
+            _errorCodes = [
+                "Server Error",
+                "Unknown Operation",
+                "Invalid Payload",
+                "Auth Failure",
+                "Already Identified",
+                "Rate Limited",
+                "Restart",
+                "Maintenance",
+                "Timeout",
+                "Already Subscribed",
+                "Not Subscribed",
+                "Insufficient Privilege",
+                "Inactivity?"
+            ];
+            _reconnectDelay = [
+                1000,
+                -1,
+                -1,
+                -1,
+                0,
+                3000,
+                1000,
+                300000,
+                1000,
+                0,
+                0,
+                1000,
+                1000
+            ];
+        }
+
+
+        public void Initialize()
+        {
+            _logger.Information("Initializing 7tv websocket client.");
+            OnConnected += (sender, e) =>
+            {
+                Connected = true;
+                _logger.Information("7tv websocket client connected.");
+            };
+
+            OnDisconnected += (sender, e) => OnDisconnection(sender, e);
+
+            if (!string.IsNullOrEmpty(_user.SevenEmoteSetId))
+                URL = $"{SevenApiClient.WEBSOCKET_URL}@emote_set.*<object_id={_user.SevenEmoteSetId}>";
+        }
+
+        public async Task Connect()
+        {
+            if (string.IsNullOrEmpty(URL))
+            {
+                _logger.Warning("Cannot find 7tv url. Not connecting to 7tv websockets.");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(_user.SevenEmoteSetId))
+            {
+                _logger.Warning("Cannot find 7tv data for your channel. Not connecting to 7tv websockets.");
+                return;
+            }
+
+            _logger.Debug($"7tv client attempting to connect to {URL}");
+            await ConnectAsync($"{URL}");
+        }
+
+        private async void OnDisconnection(object? sender, SocketDisconnectionEventArgs e)
+        {
+            Connected = false;
+
+            if (int.TryParse(e.Reason, out int code))
+            {
+                if (code >= 0 && code < _errorCodes.Length)
+                    _logger.Warning($"Received end of stream message for 7tv websocket [reason: {_errorCodes[code]}][code: {code}]");
+                else
+                    _logger.Warning($"Received end of stream message for 7tv websocket [code: {code}]");
+
+                if (code >= 0 && code < _reconnectDelay.Length && _reconnectDelay[code] < 0)
+                {
+                    _logger.Error($"7tv client will remain disconnected due to a bad client implementation.");
+                    return;
+                }
+
+                if (_reconnectDelay[code] > 0)
+                    await Task.Delay(_reconnectDelay[code]);
+            }
+
+            if (string.IsNullOrWhiteSpace(_user.SevenEmoteSetId))
+            {
+                _logger.Warning("Could not find the 7tv emote set id. Not reconnecting.");
+                return;
+            }
+
+            await Connect();
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+            if (Connected && ConnectionDetails?.SessionId != null)
+            {
+                await Send(34, new ResumeMessage() { SessionId = ConnectionDetails.SessionId });
+                _logger.Debug("Resumed connection to 7tv websocket.");
+            }
+            else
+            {
+                _logger.Debug("Resumed connection to 7tv websocket on a different session.");
+            }
         }
     }
 }

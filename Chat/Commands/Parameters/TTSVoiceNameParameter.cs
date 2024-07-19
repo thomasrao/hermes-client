@@ -1,11 +1,13 @@
 namespace TwitchChatTTS.Chat.Commands.Parameters
 {
-    public class TTSVoiceNameParameter : ChatCommandParameter
+    public class TTSVoiceNameParameter : CommandParameter
     {
+        private bool _enabled;
         private readonly User _user;
 
-        public TTSVoiceNameParameter(User user, bool optional = false) : base("TTS Voice Name", "Name of a TTS voice", optional)
+        public TTSVoiceNameParameter(string name, bool enabled, User user, bool optional = false) : base(name, optional)
         {
+            _enabled = enabled;
             _user = user;
         }
 
@@ -13,8 +15,11 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
         {
             if (_user.VoicesAvailable == null)
                 return false;
-
+            
             value = value.ToLower();
+            if (_enabled)
+                return _user.VoicesEnabled.Any(v => v.ToLower() == value);
+            
             return _user.VoicesAvailable.Any(e => e.Value.ToLower() == value);
         }
     }

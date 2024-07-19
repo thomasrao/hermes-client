@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using org.mariuszgromada.math.mxparser;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
+using TwitchChatTTS.OBS.Socket;
 using TwitchChatTTS.OBS.Socket.Data;
-using TwitchChatTTS.OBS.Socket.Manager;
 
 namespace TwitchChatTTS.Twitch.Redemptions
 {
@@ -15,7 +15,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
     {
         private readonly IDictionary<string, IList<RedeemableAction>> _store;
         private readonly User _user;
-        private readonly OBSManager _obsManager;
+        private readonly OBSSocketClient _obs;
         private readonly HermesSocketClient _hermes;
         private readonly ILogger _logger;
         private readonly Random _random;
@@ -24,13 +24,13 @@ namespace TwitchChatTTS.Twitch.Redemptions
 
         public RedemptionManager(
             User user,
-            OBSManager obsManager,
+            [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
             [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
             ILogger logger)
         {
             _store = new Dictionary<string, IList<RedeemableAction>>();
             _user = user;
-            _obsManager = obsManager;
+            _obs = (obs as OBSSocketClient)!;
             _hermes = (hermes as HermesSocketClient)!;
             _logger = logger;
             _random = new Random();
@@ -72,7 +72,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
                         break;
                     case "OBS_TRANSFORM":
                         var type = typeof(OBSTransformationData);
-                        await _obsManager.UpdateTransformation(action.Data["scene_name"], action.Data["scene_item_name"], (d) =>
+                        await _obs.UpdateTransformation(action.Data["scene_name"], action.Data["scene_item_name"], (d) =>
                         {
                             string[] properties = ["rotation", "position_x", "position_y"];
                             foreach (var property in properties)
@@ -111,13 +111,13 @@ namespace TwitchChatTTS.Twitch.Redemptions
                         });
                         break;
                     case "TOGGLE_OBS_VISIBILITY":
-                        await _obsManager.ToggleSceneItemVisibility(action.Data["scene_name"], action.Data["scene_item_name"]);
+                        await _obs.ToggleSceneItemVisibility(action.Data["scene_name"], action.Data["scene_item_name"]);
                         break;
                     case "SPECIFIC_OBS_VISIBILITY":
-                        await _obsManager.UpdateSceneItemVisibility(action.Data["scene_name"], action.Data["scene_item_name"], action.Data["obs_visible"].ToLower() == "true");
+                        await _obs.UpdateSceneItemVisibility(action.Data["scene_name"], action.Data["scene_item_name"], action.Data["obs_visible"].ToLower() == "true");
                         break;
                     case "SPECIFIC_OBS_INDEX":
-                        await _obsManager.UpdateSceneItemIndex(action.Data["scene_name"], action.Data["scene_item_name"], int.Parse(action.Data["obs_index"]));
+                        await _obs.UpdateSceneItemIndex(action.Data["scene_name"], action.Data["scene_item_name"], int.Parse(action.Data["obs_index"]));
                         break;
                     case "SLEEP":
                         _logger.Debug("Sleeping on thread due to redemption for OBS.");

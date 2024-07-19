@@ -40,39 +40,15 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             client.LoggedIn = true;
             _logger.Information($"Logged in as {_user.TwitchUsername} {(message.WebLogin ? "via web" : "via TTS app")}.");
 
-            await client.Send(3, new RequestMessage()
-            {
-                Type = "get_tts_voices",
-                Data = null
-            });
-
-            await client.Send(3, new RequestMessage()
-            {
-                Type = "get_tts_users",
-                Data = new Dictionary<string, object>() { { "user", _user.HermesUserId } }
-            });
-
-            await client.Send(3, new RequestMessage()
-            {
-                Type = "get_default_tts_voice",
-                Data = null
-            });
-
-            await client.Send(3, new RequestMessage()
-            {
-                Type = "get_chatter_ids",
-                Data = null
-            });
-
-            await client.Send(3, new RequestMessage()
-            {
-                Type = "get_emotes",
-                Data = null
-            });
-
-            await client.GetRedemptions();
-
-            await Task.Delay(TimeSpan.FromSeconds(3));
+            await client.FetchTTSVoices();
+            await client.FetchEnabledTTSVoices();
+            await client.FetchTTSWordFilters();
+            await client.FetchTTSChatterVoices();
+            await client.FetchDefaultTTSVoice();
+            await client.FetchChatterIdentifiers();
+            await client.FetchEmotes();
+            await client.FetchRedemptions();
+            await client.FetchPermissions();
 
             _logger.Information("TTS is now ready.");
             client.Ready = true;

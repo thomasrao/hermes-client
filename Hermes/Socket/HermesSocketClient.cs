@@ -36,14 +36,14 @@ namespace TwitchChatTTS.Hermes.Socket
             User user,
             Configuration configuration,
             ICallbackManager<HermesRequestData> callbackManager,
-            [FromKeyedServices("hermes")] HandlerManager<WebSocketClient, IWebSocketHandler> handlerManager,
-            [FromKeyedServices("hermes")] HandlerTypeManager<WebSocketClient, IWebSocketHandler> typeManager,
+            [FromKeyedServices("hermes")] IEnumerable<IWebSocketHandler> handlers,
+            [FromKeyedServices("hermes")] MessageTypeManager<IWebSocketHandler> typeManager,
             ILogger logger
-        ) : base(logger, handlerManager, typeManager, new JsonSerializerOptions()
+        ) : base(handlers, typeManager, new JsonSerializerOptions()
         {
             PropertyNameCaseInsensitive = false,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-        })
+        }, logger)
         {
             _user = user;
             _configuration = configuration;
@@ -74,7 +74,7 @@ namespace TwitchChatTTS.Hermes.Socket
             if (!Connected)
                 return;
 
-            await DisconnectAsync();
+            await DisconnectAsync(new SocketDisconnectionEventArgs("Normal disconnection", "Disconnection was executed"));
         }
 
         public async Task CreateTTSVoice(string voiceName)
@@ -104,11 +104,67 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task GetRedemptions()
+        public async Task FetchChatterIdentifiers() {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_chatter_ids",
+                Data = null
+            });
+        }
+
+        public async Task FetchDefaultTTSVoice() {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_default_tts_voice",
+                Data = null
+            });
+        }
+
+        public async Task FetchEmotes() {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_emotes",
+                Data = null
+            });
+        }
+
+        public async Task FetchEnabledTTSVoices() {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_enabled_tts_voices",
+                Data = null
+            });
+        }
+
+        public async Task FetchTTSVoices() {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_tts_voices",
+                Data = null
+            });
+        }
+
+        public async Task FetchTTSChatterVoices() {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_tts_users",
+                Data = null
+            });
+        }
+
+        public async Task FetchTTSWordFilters() {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_tts_word_filters",
+                Data = null
+            });
+        }
+
+        public async Task FetchRedemptions()
         {
             var requestId = _callbackManager.GenerateKeyForCallback(new HermesRequestData()
             {
-                Callback = async (d) => await GetRedeemableActions(d["redemptions"] as IEnumerable<Redemption>),
+                Callback = async (d) => await FetchRedeemableActions(d["redemptions"] as IEnumerable<Redemption>),
                 Data = new Dictionary<string, object>()
             });
 
@@ -120,7 +176,7 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task GetRedeemableActions(IEnumerable<Redemption> redemptions)
+        private async Task FetchRedeemableActions(IEnumerable<Redemption> redemptions)
         {
             var requestId = _callbackManager.GenerateKeyForCallback(new HermesRequestData()
             {
@@ -131,6 +187,15 @@ namespace TwitchChatTTS.Hermes.Socket
             {
                 RequestId = requestId,
                 Type = "get_redeemable_actions",
+                Data = null
+            });
+        }
+
+        public async Task FetchPermissions()
+        {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_permissions",
                 Data = null
             });
         }

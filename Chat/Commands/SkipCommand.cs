@@ -1,35 +1,98 @@
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchLib.Client.Models;
+using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
 {
-    public class SkipCommand : ChatCommand
+    public class SkipCommand : IChatCommand
     {
-        private readonly TTSPlayer _ttsPlayer;
+        private readonly TTSPlayer _player;
         private readonly ILogger _logger;
 
         public SkipCommand(TTSPlayer ttsPlayer, ILogger logger)
-        : base("skip", "Skips the current text to speech message.")
         {
-            _ttsPlayer = ttsPlayer;
+            _player = ttsPlayer;
             _logger = logger;
         }
 
-        public override async Task<bool> CheckDefaultPermissions(ChatMessage message)
+        public string Name => "skip";
+
+        public void Build(ICommandBuilder builder)
         {
-            return message.IsModerator || message.IsVip || message.IsBroadcaster;
+            builder.CreateCommandTree(Name, b =>
+            {
+                b.CreateStaticInputParameter("all", b =>
+                {
+                    b.CreateCommand(new TTSPlayerSkipAllCommand(_player, _logger));
+                }).CreateCommand(new TTSPlayerSkipCommand(_player, _logger));
+            });
+            builder.CreateCommandTree("skipall", b => {
+                b.CreateCommand(new TTSPlayerSkipAllCommand(_player, _logger));
+            });
         }
 
-        public override async Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client)
+
+        private sealed class TTSPlayerSkipCommand : IChatPartialCommand
         {
-            if (_ttsPlayer.Playing == null)
-                return;
+            private readonly TTSPlayer _ttsPlayer;
+            private readonly ILogger _logger;
 
-            AudioPlaybackEngine.Instance.RemoveMixerInput(_ttsPlayer.Playing);
-            _ttsPlayer.Playing = null;
+            public bool AcceptCustomPermission { get => true; }
 
-            _logger.Information("Skipped current tts.");
+            public TTSPlayerSkipCommand(TTSPlayer ttsPlayer, ILogger logger)
+            {
+                _ttsPlayer = ttsPlayer;
+                _logger = logger;
+            }
+
+            public bool CheckDefaultPermissions(ChatMessage message)
+            {
+                return message.IsModerator || message.IsVip || message.IsBroadcaster;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            {
+                if (_ttsPlayer.Playing == null)
+                    return;
+
+                AudioPlaybackEngine.Instance.RemoveMixerInput(_ttsPlayer.Playing);
+                _ttsPlayer.Playing = null;
+
+                _logger.Information("Skipped current tts.");
+            }
+        }
+
+        private sealed class TTSPlayerSkipAllCommand : IChatPartialCommand
+        {
+            private readonly TTSPlayer _ttsPlayer;
+            private readonly ILogger _logger;
+
+            public bool AcceptCustomPermission { get => true; }
+
+            public TTSPlayerSkipAllCommand(TTSPlayer ttsPlayer, ILogger logger)
+            {
+                _ttsPlayer = ttsPlayer;
+                _logger = logger;
+            }
+
+            public bool CheckDefaultPermissions(ChatMessage message)
+            {
+                return message.IsModerator || message.IsVip || message.IsBroadcaster;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            {
+                _ttsPlayer.RemoveAll();
+
+                if (_ttsPlayer.Playing == null)
+                    return;
+
+                AudioPlaybackEngine.Instance.RemoveMixerInput(_ttsPlayer.Playing);
+                _ttsPlayer.Playing = null;
+
+                _logger.Information("Skipped all queued and playing tts.");
+            }
         }
     }
 }

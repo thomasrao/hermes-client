@@ -2,89 +2,161 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using TwitchChatTTS.Chat.Commands.Parameters;
 using TwitchChatTTS.Hermes.Socket;
+using TwitchChatTTS.OBS.Socket;
 using TwitchChatTTS.OBS.Socket.Data;
-using TwitchChatTTS.OBS.Socket.Manager;
 using TwitchLib.Client.Models;
+using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
 {
-    public class OBSCommand : ChatCommand
+    public class OBSCommand : IChatCommand
     {
-        private readonly User _user;
-        private readonly OBSManager _manager;
+        private readonly OBSSocketClient _obs;
         private readonly ILogger _logger;
 
+        public string Name => "obs";
+
         public OBSCommand(
-            [FromKeyedServices("parameter-unvalidated")] ChatCommandParameter unvalidatedParameter,
-            User user,
-            OBSManager manager,
+            [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
             ILogger logger
-        ) : base("obs", "Various obs commands.")
+        )
         {
-            _user = user;
-            _manager = manager;
+            _obs = (obs as OBSSocketClient)!;
             _logger = logger;
-
-            AddParameter(unvalidatedParameter);
-            AddParameter(unvalidatedParameter, optional: true);
-            AddParameter(unvalidatedParameter, optional: true);
-            AddParameter(unvalidatedParameter, optional: true);
         }
 
-        public override async Task<bool> CheckDefaultPermissions(ChatMessage message)
+
+        public void Build(ICommandBuilder builder)
         {
-            return message.IsModerator || message.IsBroadcaster;
-        }
-
-        public override async Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client)
-        {
-            if (_user == null || _user.VoicesAvailable == null)
-                return;
-
-            var action = args[0].ToLower();
-
-            switch (action)
+            builder.CreateCommandTree(Name, b =>
             {
-                case "get_scene_item_id":
-                    if (args.Count < 3)
-                        return;
+                b.CreateStaticInputParameter("get_scene_item_id", b =>
+                {
+                    b.CreateUnvalidatedParameter("sceneName")
+                        .CreateCommand(new OBSGetSceneItemId(_obs, _logger));
+                })
+                .CreateStaticInputParameter("transform", b =>
+                {
+                    b.CreateUnvalidatedParameter("sceneName")
+                        .CreateUnvalidatedParameter("sourceName")
+                        .CreateObsTransformationParameter("propertyName")
+                        .CreateUnvalidatedParameter("value")
+                        .CreateCommand(new OBSTransform(_obs, _logger));
+                })
+                .CreateStaticInputParameter("visibility", b =>
+                {
+                    b.CreateUnvalidatedParameter("sceneName")
+                        .CreateUnvalidatedParameter("sourceName")
+                        .CreateStateParameter("state")
+                        .CreateCommand(new OBSVisibility(_obs, _logger));
+                });
+            });
+        }
 
-                    _logger.Debug($"Getting scene item id via chat command [args: {string.Join(" ", args)}]");
-                    await _manager.Send(new RequestMessage("GetSceneItemId", string.Empty, new Dictionary<string, object>() { { "sceneName", args[1] }, { "sourceName", args[2] } }));
-                    break;
-                case "transform":
-                    if (args.Count < 5)
-                        return;
+        private sealed class OBSGetSceneItemId : IChatPartialCommand
+        {
+            private readonly OBSSocketClient _obs;
+            private readonly ILogger _logger;
 
-                    _logger.Debug($"Getting scene item transformation data via chat command [args: {string.Join(" ", args)}]");
-                    await _manager.UpdateTransformation(args[1], args[2], (d) =>
-                    {
-                        if (args[3].ToLower() == "rotation")
-                            d.Rotation = int.Parse(args[4]);
-                        else if (args[3].ToLower() == "x")
-                            d.Rotation = int.Parse(args[4]);
-                        else if (args[3].ToLower() == "y")
-                            d.PositionY = int.Parse(args[4]);
-                    });
-                    break;
-                case "sleep":
-                    if (args.Count < 2)
-                        return;
+            public string Name => "obs";
+            public bool AcceptCustomPermission { get => true; }
 
-                    _logger.Debug($"Sending OBS to sleep via chat command [args: {string.Join(" ", args)}]");
-                    await _manager.Send(new RequestMessage("Sleep", string.Empty, new Dictionary<string, object>() { { "sleepMillis", int.Parse(args[1]) } }));
-                    break;
-                case "visibility":
-                    if (args.Count < 4)
-                        return;
-                        
-                    _logger.Debug($"Updating scene item visibility via chat command [args: {string.Join(" ", args)}]");
-                    await _manager.UpdateSceneItemVisibility(args[1], args[2], args[3].ToLower() == "true");
-                    break;
-                default:
-                    break;
+            public OBSGetSceneItemId(
+                [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
+                ILogger logger
+            )
+            {
+                _obs = (obs as OBSSocketClient)!;
+                _logger = logger;
+            }
+
+            public bool CheckDefaultPermissions(ChatMessage message)
+            {
+                return message.IsModerator || message.IsBroadcaster;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            {
+                string sceneName = values["sceneName"];
+                string sourceName = values["sourceName"];
+                _logger.Debug($"Getting scene item id via chat command [scene name: {sceneName}][source name: {sourceName}]");
+                await _obs.Send(new RequestMessage("GetSceneItemId", string.Empty, new Dictionary<string, object>() { { "sceneName", sceneName }, { "sourceName", sourceName } }));
+            }
+        }
+
+        private sealed class OBSTransform : IChatPartialCommand
+        {
+            private readonly OBSSocketClient _obs;
+            private readonly ILogger _logger;
+
+            public string Name => "obs";
+            public bool AcceptCustomPermission { get => true; }
+
+            public OBSTransform(
+                [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
+                ILogger logger
+            )
+            {
+                _obs = (obs as OBSSocketClient)!;
+                _logger = logger;
+            }
+
+            public bool CheckDefaultPermissions(ChatMessage message)
+            {
+                return message.IsModerator || message.IsBroadcaster;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            {
+                string sceneName = values["sceneName"];
+                string sourceName = values["sourceName"];
+                string propertyName = values["propertyName"];
+                string value = values["value"];
+                _logger.Debug($"Getting scene item transformation data via chat command [scene name: {sceneName}][source name: {sourceName}][property: {propertyName}][value: {value}]");
+                await _obs.UpdateTransformation(sceneName, sourceName, (d) =>
+                {
+                    if (propertyName.ToLower() == "rotation" || propertyName.ToLower() == "rotate")
+                        d.Rotation = int.Parse(value);
+                    else if (propertyName.ToLower() == "x")
+                        d.PositionX = int.Parse(value);
+                    else if (propertyName.ToLower() == "y")
+                        d.PositionY = int.Parse(value);
+                });
+            }
+        }
+
+        private sealed class OBSVisibility : IChatPartialCommand
+        {
+            private readonly OBSSocketClient _obs;
+            private readonly ILogger _logger;
+
+            public string Name => "obs";
+            public bool AcceptCustomPermission { get => true; }
+
+            public OBSVisibility(
+                [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
+                ILogger logger
+            )
+            {
+                _obs = (obs as OBSSocketClient)!;
+                _logger = logger;
+            }
+
+            public bool CheckDefaultPermissions(ChatMessage message)
+            {
+                return message.IsModerator || message.IsBroadcaster;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            {
+                string sceneName = values["sceneName"];
+                string sourceName = values["sourceName"];
+                string state = values["state"];
+                _logger.Debug($"Updating scene item visibility via chat command [scene name: {sceneName}][source name: {sourceName}][state: {state}]");
+                string stateLower = state.ToLower();
+                bool stateBool = stateLower == "true" || stateLower == "enable" || stateLower == "enabled" || stateLower == "yes";
+                await _obs.UpdateSceneItemVisibility(sceneName, sourceName, stateBool);
             }
         }
     }

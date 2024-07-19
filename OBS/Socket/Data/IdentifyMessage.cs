@@ -1,15 +1,19 @@
+using System.Text.Json.Serialization;
+
 namespace TwitchChatTTS.OBS.Socket.Data
 {
     public class IdentifyMessage
     {
         public int RpcVersion { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Authentication { get; set; }
-        public int EventSubscriptions { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? EventSubscriptions { get; set; }
 
-        public IdentifyMessage(int version, string auth, int subscriptions)
+        public IdentifyMessage(int rpcVersion, string? authentication, int? subscriptions)
         {
-            RpcVersion = version;
-            Authentication = auth;
+            RpcVersion = rpcVersion;
+            Authentication = authentication;
             EventSubscriptions = subscriptions;
         }
     }

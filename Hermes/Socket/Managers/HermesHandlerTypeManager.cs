@@ -7,12 +7,12 @@ using Serilog;
 
 namespace TwitchChatTTS.Hermes.Socket.Managers
 {
-    public class HermesHandlerTypeManager : WebSocketHandlerTypeManager
+    public class HermesMessageTypeManager : WebSocketMessageTypeManager
     {
-        public HermesHandlerTypeManager(
-            ILogger factory,
-            [FromKeyedServices("hermes")] HandlerManager<WebSocketClient, IWebSocketHandler> handlers
-        ) : base(factory, handlers)
+        public HermesMessageTypeManager(
+            [FromKeyedServices("hermes")] IEnumerable<IWebSocketHandler> handlers,
+            ILogger logger
+        ) : base(handlers, logger)
         {
         }
 

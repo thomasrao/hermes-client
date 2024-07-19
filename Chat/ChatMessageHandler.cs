@@ -6,22 +6,22 @@ using TwitchChatTTS.Chat.Commands;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Chat.Groups;
-using TwitchChatTTS.OBS.Socket.Manager;
 using TwitchChatTTS.Chat.Emotes;
 using Microsoft.Extensions.DependencyInjection;
 using CommonSocketLibrary.Common;
 using CommonSocketLibrary.Abstract;
+using TwitchChatTTS.OBS.Socket;
 
 
 public class ChatMessageHandler
 {
     private readonly User _user;
     private readonly TTSPlayer _player;
-    private readonly ChatCommandManager _commands;
+    private readonly CommandManager _commands;
     private readonly IGroupPermissionManager _permissionManager;
     private readonly IChatterGroupManager _chatterGroupManager;
     private readonly IEmoteDatabase _emotes;
-    private readonly OBSManager _obsManager;
+    private readonly OBSSocketClient _obs;
     private readonly HermesSocketClient _hermes;
     private readonly Configuration _configuration;
 
@@ -36,12 +36,12 @@ public class ChatMessageHandler
     public ChatMessageHandler(
         User user,
         TTSPlayer player,
-        ChatCommandManager commands,
+        CommandManager commands,
         IGroupPermissionManager permissionManager,
         IChatterGroupManager chatterGroupManager,
         IEmoteDatabase emotes,
-        OBSManager obsManager,
         [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
+        [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
         Configuration configuration,
         ILogger logger
     )
@@ -52,7 +52,7 @@ public class ChatMessageHandler
         _permissionManager = permissionManager;
         _chatterGroupManager = chatterGroupManager;
         _emotes = emotes;
-        _obsManager = obsManager;
+        _obs = (obs as OBSSocketClient)!;
         _hermes = (hermes as HermesSocketClient)!;
         _configuration = configuration;
         _logger = logger;
@@ -71,7 +71,7 @@ public class ChatMessageHandler
             _logger.Debug($"TTS is not yet ready. Ignoring chat messages [message id: {m.Id}]");
             return new MessageResult(MessageStatus.NotReady, -1, -1);
         }
-        if (_configuration.Twitch?.TtsWhenOffline != true && !_obsManager.Streaming)
+        if (_configuration.Twitch?.TtsWhenOffline != true && !_obs.Streaming)
         {
             _logger.Debug($"OBS is not streaming. Ignoring chat messages [message id: {m.Id}]");
             return new MessageResult(MessageStatus.NotReady, -1, -1);
@@ -109,7 +109,7 @@ public class ChatMessageHandler
             return new MessageResult(MessageStatus.Blocked, -1, -1);
         }
 
-        if (_obsManager.Streaming && !_chatters.Contains(chatterId))
+        if (_obs.Streaming && !_chatters.Contains(chatterId))
         {
             tasks.Add(_hermes.SendChatterDetails(chatterId, m.Username));
             _chatters.Add(chatterId);
@@ -148,7 +148,7 @@ public class ChatMessageHandler
             if (wordCounter[w] <= 4 && (emoteId == null || totalEmoteUsed <= 5))
                 filteredMsg += w + " ";
         }
-        if (_obsManager.Streaming && newEmotes.Any())
+        if (_obs.Streaming && newEmotes.Any())
             tasks.Add(_hermes.SendEmoteDetails(newEmotes));
         msg = filteredMsg;
 

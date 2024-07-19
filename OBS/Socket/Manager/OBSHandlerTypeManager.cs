@@ -1,4 +1,3 @@
-using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using CommonSocketLibrary.Socket.Manager;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,12 +5,12 @@ using Serilog;
 
 namespace TwitchChatTTS.OBS.Socket.Manager
 {
-    public class OBSHandlerTypeManager : WebSocketHandlerTypeManager
+    public class OBSMessageTypeManager : WebSocketMessageTypeManager
     {
-        public OBSHandlerTypeManager(
-            ILogger factory,
-            [FromKeyedServices("obs")] HandlerManager<WebSocketClient, IWebSocketHandler> handlers
-        ) : base(factory, handlers)
+        public OBSMessageTypeManager(
+            [FromKeyedServices("obs")] IEnumerable<IWebSocketHandler> handlers,
+            ILogger logger
+        ) : base(handlers, logger)
         {
         }
     }

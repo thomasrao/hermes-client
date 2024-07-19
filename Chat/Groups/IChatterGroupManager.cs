@@ -1,3 +1,5 @@
+using HermesSocketLibrary.Requests.Messages;
+
 namespace TwitchChatTTS.Chat.Groups
 {
     public interface IChatterGroupManager

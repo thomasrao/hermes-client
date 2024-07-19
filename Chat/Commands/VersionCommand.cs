@@ -2,31 +2,52 @@ using HermesSocketLibrary.Socket.Data;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchLib.Client.Models;
+using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
 {
-    public class VersionCommand : ChatCommand
+    public class VersionCommand : IChatCommand
     {
         private readonly User _user;
         private ILogger _logger;
 
+        public string Name => "version";
+
         public VersionCommand(User user, ILogger logger)
-        : base("version", "Does nothing.")
         {
             _user = user;
             _logger = logger;
         }
 
-        public override async Task<bool> CheckDefaultPermissions(ChatMessage message)
+        public void Build(ICommandBuilder builder)
         {
-            return message.IsBroadcaster;
+            builder.CreateCommandTree(Name, b => b.CreateCommand(new AppVersionCommand(_user, _logger)));
         }
 
-        public override async Task Execute(IList<string> args, ChatMessage message, HermesSocketClient client)
+        private sealed class AppVersionCommand : IChatPartialCommand
         {
-            _logger.Information($"Version: {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}");
+            private readonly User _user;
+            private ILogger _logger;
 
-            await client.SendLoggingMessage(HermesLoggingLevel.Info, $"{_user.TwitchUsername} [twitch id: {_user.TwitchUserId}] using version {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}.");
+            public bool AcceptCustomPermission { get => true; }
+
+            public AppVersionCommand(User user, ILogger logger)
+            {
+                _user = user;
+                _logger = logger;
+            }
+
+            public bool CheckDefaultPermissions(ChatMessage message)
+            {
+                return message.IsBroadcaster;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            {
+                _logger.Information($"TTS Version: {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}");
+
+                await client.SendLoggingMessage(HermesLoggingLevel.Info, $"{_user.TwitchUsername} [twitch id: {_user.TwitchUserId}] using version {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}.");
+            }
         }
     }
 }

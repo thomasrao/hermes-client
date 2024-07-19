@@ -1,4 +1,3 @@
-using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using CommonSocketLibrary.Socket.Manager;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,13 +5,12 @@ using Serilog;
 
 namespace TwitchChatTTS.Seven.Socket.Managers
 {
-    public class SevenHandlerTypeManager : WebSocketHandlerTypeManager
+    public class SevenMessageTypeManager : WebSocketMessageTypeManager
     {
-        public SevenHandlerTypeManager(
-            ILogger factory,
-            [FromKeyedServices("7tv")] HandlerManager<WebSocketClient,
-            IWebSocketHandler> handlers
-        ) : base(factory, handlers)
+        public SevenMessageTypeManager(
+            [FromKeyedServices("7tv")] IEnumerable<IWebSocketHandler> handlers,
+            ILogger logger
+        ) : base(handlers, logger)
         {
         }
     }

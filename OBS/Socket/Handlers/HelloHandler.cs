@@ -26,9 +26,9 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             
             string? password = string.IsNullOrWhiteSpace(_configuration.Obs?.Password) ? null : _configuration.Obs.Password.Trim();
             _logger.Verbose("OBS websocket password: " + password);
-            if (message.Authentication == null || string.IsNullOrWhiteSpace(password))
+            if (message.Authentication == null || string.IsNullOrEmpty(password))
             {
-                await sender.Send(1, new IdentifyMessage(message.RpcVersion, string.Empty, 1023 | 262144));
+                await sender.Send(1, new IdentifyMessage(message.RpcVersion, null, 1023 | 262144));
                 return;
             }
 
@@ -39,7 +39,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
 
             string secret = password + salt;
             byte[] bytes = Encoding.UTF8.GetBytes(secret);
-            string hash = null;
+            string? hash = null;
             using (var sha = SHA256.Create())
             {
                 bytes = sha.ComputeHash(bytes);

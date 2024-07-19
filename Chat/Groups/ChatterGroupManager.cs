@@ -1,5 +1,6 @@
 
 using System.Collections.Concurrent;
+using HermesSocketLibrary.Requests.Messages;
 using Serilog;
 
 namespace TwitchChatTTS.Chat.Groups
@@ -59,7 +60,10 @@ namespace TwitchChatTTS.Chat.Groups
         }
 
         public int GetPriorityFor(IEnumerable<string> groupNames) {
-            return groupNames.Select(g => _groups.TryGetValue(g, out var group) ? group : null).Where(g => g != null).Max(g => g.Priority);
+            var values = groupNames.Select(g => _groups.TryGetValue(g, out var group) ? group : null).Where(g => g != null);
+            if (values.Any())
+                return values.Max(g => g.Priority);
+            return 0;
         }
 
         public bool Remove(long chatterId, string groupId) {

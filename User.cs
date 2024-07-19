@@ -31,10 +31,6 @@ namespace TwitchChatTTS
         private HashSet<string> _voicesEnabled;
 
 
-        public User()
-        {
-        }
-
         private Regex? GenerateEnabledVoicesRegex()
         {
             if (VoicesAvailable == null || VoicesAvailable.Count() <= 0)
