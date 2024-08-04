@@ -1,3 +1,5 @@
+using TwitchChatTTS.Twitch.Socket.Messages;
+
 namespace TwitchChatTTS.Chat.Commands.Parameters
 {
     public class TTSVoiceNameParameter : CommandParameter
@@ -11,7 +13,7 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
             _user = user;
         }
 
-        public override bool Validate(string value)
+        public override bool Validate(string value, ChannelChatMessage message)
         {
             if (_user.VoicesAvailable == null)
                 return false;

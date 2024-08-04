@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Requests.Callbacks;
@@ -160,8 +161,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 if (chatters == null)
                     return;
 
-                var client = _serviceProvider.GetRequiredService<ChatMessageHandler>();
-                client.Chatters = [.. chatters];
+                _user.Chatters = [.. chatters];
                 _logger.Information($"Fetched {chatters.Count()} chatters' id.");
             }
             else if (message.Request.Type == "get_emotes")
@@ -232,7 +232,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                         continue;
                     }
 
-                    
+
                     var path = $"{group.Name}.{permission.Path}";
                     permissionManager.Set(path, permission.Allow);
                     _logger.Debug($"Added group permission [id: {permission.Id}][group id: {permission.GroupId}][path: {permission.Path}]");
@@ -254,8 +254,19 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                     return;
                 }
 
-                _user.RegexFilters = wordFilters.ToList();
-                _logger.Information($"TTS word filters [count: {_user.RegexFilters.Count}] have been refreshed.");
+                var filters = wordFilters.Where(f => f.Search != null && f.Replace != null).ToArray();
+                foreach (var filter in filters)
+                {
+                    try
+                    {
+                        var re = new Regex(filter.Search!, RegexOptions.Compiled);
+                        re.Match(string.Empty);
+                        filter.Regex = re;
+                    }
+                    catch (Exception e) { }
+                }
+                _user.RegexFilters = filters;
+                _logger.Information($"TTS word filters [count: {_user.RegexFilters.Count()}] have been refreshed.");
             }
             else if (message.Request.Type == "update_tts_voice_state")
             {

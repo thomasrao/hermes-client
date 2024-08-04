@@ -1,4 +1,5 @@
 using NAudio.Wave;
+using TwitchChatTTS.Twitch.Socket.Messages;
 
 public class TTSPlayer
 {
@@ -7,7 +8,7 @@ public class TTSPlayer
     private readonly Mutex _mutex;
     private readonly Mutex _mutex2;
 
-    public ISampleProvider? Playing { get; set; }
+    public TTSMessage? Playing { get; set; }
 
     public TTSPlayer()
     {
@@ -100,12 +101,80 @@ public class TTSPlayer
         }
     }
 
+    public void RemoveAll(long chatterId)
+    {
+        try
+        {
+            _mutex2.WaitOne();
+            if (_buffer.UnorderedItems.Any(i => i.Element.ChatterId == chatterId)) {
+                var list = _buffer.UnorderedItems.Where(i => i.Element.ChatterId != chatterId).ToArray();
+                _buffer.Clear();
+                foreach (var item in list)
+                    _buffer.Enqueue(item.Element, item.Element.Priority);
+            }
+        }
+        finally
+        {
+            _mutex2.ReleaseMutex();
+        }
+
+        try
+        {
+            _mutex.WaitOne();
+            if (_messages.UnorderedItems.Any(i => i.Element.ChatterId == chatterId)) {
+                var list = _messages.UnorderedItems.Where(i => i.Element.ChatterId != chatterId).ToArray();
+                _messages.Clear();
+                foreach (var item in list)
+                    _messages.Enqueue(item.Element, item.Element.Priority);
+            }
+        }
+        finally
+        {
+            _mutex.ReleaseMutex();
+        }
+    }
+
+    public void RemoveMessage(string messageId)
+    {
+        try
+        {
+            _mutex2.WaitOne();
+            if (_buffer.UnorderedItems.Any(i => i.Element.MessageId == messageId)) {
+                var list = _buffer.UnorderedItems.Where(i => i.Element.MessageId != messageId).ToArray();
+                _buffer.Clear();
+                foreach (var item in list)
+                    _buffer.Enqueue(item.Element, item.Element.Priority);
+                return;
+            }
+        }
+        finally
+        {
+            _mutex2.ReleaseMutex();
+        }
+
+        try
+        {
+            _mutex.WaitOne();
+            if (_messages.UnorderedItems.Any(i => i.Element.MessageId == messageId)) {
+                var list = _messages.UnorderedItems.Where(i => i.Element.MessageId != messageId).ToArray();
+                _messages.Clear();
+                foreach (var item in list)
+                    _messages.Enqueue(item.Element, item.Element.Priority);
+            }
+        }
+        finally
+        {
+            _mutex.ReleaseMutex();
+        }
+    }
+
     public bool IsEmpty()
     {
         return _messages.Count == 0;
     }
 
-    private class DescendingOrder : IComparer<int> {
+    private class DescendingOrder : IComparer<int>
+    {
         public int Compare(int x, int y) => y.CompareTo(x);
     }
 }
@@ -113,15 +182,12 @@ public class TTSPlayer
 public class TTSMessage
 {
     public string? Voice { get; set; }
-    public string? Channel { get; set; }
-    public string? Username { get; set; }
+    public long ChatterId { get; set; }
+    public string MessageId { get; set; }
     public string? Message { get; set; }
     public string? File { get; set; }
     public DateTime Timestamp { get; set; }
-    public bool Moderator { get; set; }
-    public bool Bot { get; set; }
-    public IEnumerable<KeyValuePair<string, string>>? Badges { get; set; }
-    public int Bits { get; set; }
+    public IEnumerable<TwitchBadge> Badges { get; set; }
     public int Priority { get; set; }
     public ISampleProvider? Audio { get; set; }
 }

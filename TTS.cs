@@ -4,33 +4,34 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using NAudio.Wave.SampleProviders;
-using TwitchLib.Client.Events;
 using org.mariuszgromada.math.mxparser;
 using TwitchChatTTS.Hermes.Socket;
-using TwitchChatTTS.Chat.Groups.Permissions;
-using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Seven.Socket;
 using TwitchChatTTS.Chat.Emotes;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using TwitchChatTTS.OBS.Socket;
+using TwitchChatTTS.Twitch.Socket.Messages;
+using TwitchChatTTS.Twitch.Socket;
 
 namespace TwitchChatTTS
 {
     public class TTS : IHostedService
     {
-        public const int MAJOR_VERSION = 3;
-        public const int MINOR_VERSION = 10;
+        public const int MAJOR_VERSION = 4;
+        public const int MINOR_VERSION = 0;
 
         private readonly User _user;
         private readonly HermesApiClient _hermesApiClient;
         private readonly SevenApiClient _sevenApiClient;
+        private readonly HermesSocketClient _hermes;
         private readonly OBSSocketClient _obs;
         private readonly SevenSocketClient _seven;
-        private readonly HermesSocketClient _hermes;
+        private readonly TwitchWebsocketClient _twitch;
         private readonly IEmoteDatabase _emotes;
         private readonly Configuration _configuration;
         private readonly TTSPlayer _player;
+        private readonly AudioPlaybackEngine _playback;
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger _logger;
 
@@ -41,9 +42,11 @@ namespace TwitchChatTTS
             [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
             [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
             [FromKeyedServices("7tv")] SocketClient<WebSocketMessage> seven,
+            [FromKeyedServices("twitch")] SocketClient<TwitchWebsocketMessage> twitch,
             IEmoteDatabase emotes,
             Configuration configuration,
             TTSPlayer player,
+            AudioPlaybackEngine playback,
             IServiceProvider serviceProvider,
             ILogger logger
         )
@@ -54,9 +57,11 @@ namespace TwitchChatTTS
             _hermes = (hermes as HermesSocketClient)!;
             _obs = (obs as OBSSocketClient)!;
             _seven = (seven as SevenSocketClient)!;
+            _twitch = (twitch as TwitchWebsocketClient)!;
             _emotes = emotes;
             _configuration = configuration;
             _player = player;
+            _playback = playback;
             _serviceProvider = serviceProvider;
             _logger = logger;
         }
@@ -89,20 +94,28 @@ namespace TwitchChatTTS
             await InitializeHermesWebsocket();
             try
             {
-                await FetchUserData(_user, _hermesApiClient);
+                var hermesAccount = await _hermesApiClient.FetchHermesAccountDetails();
+                _user.HermesUserId = hermesAccount.Id;
+                _user.HermesUsername = hermesAccount.Username;
+                _user.TwitchUsername = hermesAccount.Username;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to initialize properly. Restart app please.");
                 await Task.Delay(30 * 1000);
-            }
-
-            var twitchapiclient = await InitializeTwitchApiClient(_user.TwitchUsername, _user.TwitchUserId.ToString());
-            if (twitchapiclient == null)
-            {
-                await Task.Delay(30 * 1000);
                 return;
             }
+
+            await _hermesApiClient.AuthorizeTwitch();
+            var twitchBotToken = await _hermesApiClient.FetchTwitchBotToken();
+            _user.TwitchUserId = long.Parse(twitchBotToken.BroadcasterId!);
+            _logger.Information($"Username: {_user.TwitchUsername} [id: {_user.TwitchUserId}]");
+
+            var twitchapiclient2 = _serviceProvider.GetRequiredService<TwitchApiClient>();
+            twitchapiclient2.Initialize(twitchBotToken);
+
+            _twitch.Initialize();
+            await _twitch.Connect();
 
             var emoteSet = await _sevenApiClient.FetchChannelEmoteSet(_user.TwitchUserId.ToString());
             if (emoteSet != null)
@@ -112,9 +125,9 @@ namespace TwitchChatTTS
             await InitializeSevenTv();
             await InitializeObs();
 
-            AudioPlaybackEngine.Instance.AddOnMixerInputEnded((object? s, SampleProviderEventArgs e) =>
+            _playback.AddOnMixerInputEnded((object? s, SampleProviderEventArgs e) =>
             {
-                if (e.SampleProvider == _player.Playing)
+                if (e.SampleProvider == _player.Playing?.Audio)
                 {
                     _player.Playing = null;
                 }
@@ -142,8 +155,8 @@ namespace TwitchChatTTS
                         string url = $"https://api.streamelements.com/kappa/v2/speech?voice={m.Voice}&text={HttpUtility.UrlEncode(m.Message)}";
                         var sound = new NetworkWavSound(url);
                         var provider = new CachedWavProvider(sound);
-                        var data = AudioPlaybackEngine.Instance.ConvertSound(provider);
-                        var resampled = new WdlResamplingSampleProvider(data, AudioPlaybackEngine.Instance.SampleRate);
+                        var data = _playback.ConvertSound(provider);
+                        var resampled = new WdlResamplingSampleProvider(data, _playback.SampleRate);
                         _logger.Verbose("Fetched TTS audio data.");
 
                         m.Audio = resampled;
@@ -185,7 +198,7 @@ namespace TwitchChatTTS
                         if (!string.IsNullOrWhiteSpace(m.File) && File.Exists(m.File))
                         {
                             _logger.Debug("Playing audio file via TTS: " + m.File);
-                            AudioPlaybackEngine.Instance.PlaySound(m.File);
+                            _playback.PlaySound(m.File);
                             continue;
                         }
 
@@ -193,8 +206,8 @@ namespace TwitchChatTTS
 
                         if (m.Audio != null)
                         {
-                            _player.Playing = m.Audio;
-                            AudioPlaybackEngine.Instance.AddMixerInput(m.Audio);
+                            _player.Playing = m;
+                            _playback.AddMixerInput(m.Audio);
                         }
                     }
                     catch (Exception e)
@@ -203,9 +216,6 @@ namespace TwitchChatTTS
                     }
                 }
             });
-
-            _logger.Information("Twitch websocket client connecting...");
-            await twitchapiclient.Connect();
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
@@ -214,18 +224,6 @@ namespace TwitchChatTTS
                 _logger.Warning("Application has stopped due to cancellation token.");
             else
                 _logger.Warning("Application has stopped.");
-        }
-
-        private async Task FetchUserData(User user, HermesApiClient hermes)
-        {
-            var hermesAccount = await hermes.FetchHermesAccountDetails();
-            user.HermesUserId = hermesAccount.Id;
-            user.HermesUsername = hermesAccount.Username;
-            user.TwitchUsername = hermesAccount.Username;
-
-            var twitchBotToken = await hermes.FetchTwitchBotToken();
-            user.TwitchUserId = long.Parse(twitchBotToken.BroadcasterId!);
-            _logger.Information($"Username: {user.TwitchUsername} [id: {user.TwitchUserId}]");
         }
 
         private async Task InitializeHermesWebsocket()
@@ -267,40 +265,42 @@ namespace TwitchChatTTS
             }
         }
 
-        private async Task<TwitchApiClient?> InitializeTwitchApiClient(string username, string broadcasterId)
-        {
-            _logger.Debug("Initializing twitch client.");
-            var twitchapiclient = _serviceProvider.GetRequiredService<TwitchApiClient>();
-            if (!await twitchapiclient.Authorize(broadcasterId))
-            {
-                _logger.Error("Cannot connect to Twitch API.");
-                return null;
-            }
+        // private async Task<TwitchApiClient?> InitializeTwitchApiClient(string username)
+        // {
+        //     _logger.Debug("Initializing twitch client.");
 
-            var channels = _configuration.Twitch?.Channels ?? [username];
-            _logger.Information("Twitch channels: " + string.Join(", ", channels));
-            twitchapiclient.InitializeClient(username, channels);
-            twitchapiclient.InitializePublisher();
+        //     var hermesapiclient = _serviceProvider.GetRequiredService<HermesApiClient>();
+        //     if (!await hermesapiclient.AuthorizeTwitch())
+        //     {
+        //         _logger.Error("Cannot connect to Twitch API.");
+        //         return null;
+        //     }
 
-            var handler = _serviceProvider.GetRequiredService<ChatMessageHandler>();
-            twitchapiclient.AddOnNewMessageReceived(async (object? s, OnMessageReceivedArgs e) =>
-            {
-                try
-                {
-                    var result = await handler.Handle(e);
-                    if (result.Status != MessageStatus.None || result.Emotes == null || !result.Emotes.Any())
-                        return;
+        //     var twitchapiclient = _serviceProvider.GetRequiredService<TwitchApiClient>();
+        //     var channels = _configuration.Twitch?.Channels ?? [username];
+        //     _logger.Information("Twitch channels: " + string.Join(", ", channels));
+        //     twitchapiclient.InitializeClient(username, channels);
+        //     twitchapiclient.InitializePublisher();
 
-                    await _hermes.SendEmoteUsage(e.ChatMessage.Id, result.ChatterId, result.Emotes);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Unable to either execute a command or to send emote usage message.");
-                }
-            });
+        //     var handler = _serviceProvider.GetRequiredService<ChatMessageHandler>();
+        //     twitchapiclient.AddOnNewMessageReceived(async (object? s, OnMessageReceivedArgs e) =>
+        //     {
+        //         try
+        //         {
+        //             var result = await handler.Handle(e);
+        //             if (result.Status != MessageStatus.None || result.Emotes == null || !result.Emotes.Any())
+        //                 return;
 
-            return twitchapiclient;
-        }
+        //             await _hermes.SendEmoteUsage(e.ChatMessage.Id, result.ChatterId, result.Emotes);
+        //         }
+        //         catch (Exception ex)
+        //         {
+        //             _logger.Error(ex, "Unable to either execute a command or to send emote usage message.");
+        //         }
+        //     });
+
+        //     return twitchapiclient;
+        // }
 
         private async Task InitializeEmotes(SevenApiClient sevenapi, EmoteSet? channelEmotes)
         {

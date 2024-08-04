@@ -1,6 +1,8 @@
+using TwitchChatTTS.Twitch.Socket.Messages;
+
 namespace TwitchChatTTS.Chat.Commands.Parameters
 {
-    public abstract class CommandParameter : ICloneable
+    public abstract class CommandParameter
     {
         public string Name { get; }
         public bool Optional { get; }
@@ -11,10 +13,6 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
             Optional = optional;
         }
 
-        public abstract bool Validate(string value);
-
-        public object Clone() {
-            return (CommandParameter) MemberwiseClone();
-        }
+        public abstract bool Validate(string value, ChannelChatMessage message);
     }
 }

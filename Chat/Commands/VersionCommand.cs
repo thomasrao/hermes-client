@@ -1,7 +1,7 @@
 using HermesSocketLibrary.Socket.Data;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
-using TwitchLib.Client.Models;
+using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -37,12 +37,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 _logger.Information($"TTS Version: {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}");
 

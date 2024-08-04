@@ -36,12 +36,12 @@ namespace TwitchChatTTS.Helpers
 
         public async Task<HttpResponseMessage> Post<T>(string uri, T data)
         {
-            return await _client.PostAsJsonAsync(uri, data);
+            return await _client.PostAsJsonAsync(uri, data, _options);
         }
 
         public async Task<HttpResponseMessage> Post(string uri)
         {
-            return await _client.PostAsJsonAsync(uri, new object());
+            return await _client.PostAsJsonAsync(uri, new object(), _options);
         }
     }
 }

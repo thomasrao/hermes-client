@@ -383,7 +383,7 @@ namespace TwitchChatTTS.Hermes.Socket
             }
             catch (WebSocketException wse) when (wse.Message.Contains("502"))
             {
-                _logger.Error("Hermes websocket server cannot be found.");
+                _logger.Error($"Hermes websocket server cannot be found [code: {wse.ErrorCode}]");
             }
             catch (Exception ex)
             {

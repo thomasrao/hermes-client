@@ -1,3 +1,5 @@
+using TwitchChatTTS.Twitch.Socket.Messages;
+
 namespace TwitchChatTTS.Chat.Commands.Parameters
 {
     public class UnvalidatedParameter : CommandParameter
@@ -6,7 +8,7 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
         {
         }
 
-        public override bool Validate(string value)
+        public override bool Validate(string value, ChannelChatMessage message)
         {
             return true;
         }

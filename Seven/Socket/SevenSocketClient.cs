@@ -94,7 +94,20 @@ namespace TwitchChatTTS.Seven.Socket
             }
 
             _logger.Debug($"7tv client attempting to connect to {URL}");
-            await ConnectAsync($"{URL}");
+            try
+            {
+                await ConnectAsync(URL);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Could not connect to 7tv websocket.");
+            }
+
+            if (!Connected)
+            {
+                await Task.Delay(30000);
+                await Connect();
+            }
         }
 
         private async void OnDisconnection(object? sender, SocketDisconnectionEventArgs e)
@@ -107,21 +120,20 @@ namespace TwitchChatTTS.Seven.Socket
                     _logger.Warning($"Received end of stream message for 7tv websocket [reason: {_errorCodes[code]}][code: {code}]");
                 else
                     _logger.Warning($"Received end of stream message for 7tv websocket [code: {code}]");
-
-                if (code >= 0 && code < _reconnectDelay.Length && _reconnectDelay[code] < 0)
+                
+                if (code < 0 || code >= _reconnectDelay.Length)
+                    await Task.Delay(TimeSpan.FromSeconds(30));
+                else if (_reconnectDelay[code] < 0)
                 {
                     _logger.Error($"7tv client will remain disconnected due to a bad client implementation.");
                     return;
                 }
-
-                if (_reconnectDelay[code] > 0)
+                else if (_reconnectDelay[code] > 0)
                     await Task.Delay(_reconnectDelay[code]);
             }
-
-            if (string.IsNullOrWhiteSpace(_user.SevenEmoteSetId))
-            {
-                _logger.Warning("Could not find the 7tv emote set id. Not reconnecting.");
-                return;
+            else {
+                _logger.Warning("Unknown 7tv disconnection.");
+                await Task.Delay(TimeSpan.FromSeconds(30));
             }
 
             await Connect();

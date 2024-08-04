@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket;
-using TwitchLib.Client.Models;
+using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -44,12 +44,7 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsModerator || message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 await client.FetchEnabledTTSVoices();
             }
@@ -59,12 +54,7 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsModerator || message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 await client.FetchTTSWordFilters();
             }
@@ -74,12 +64,7 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsModerator || message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 await client.FetchTTSChatterVoices();
             }
@@ -89,12 +74,7 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsModerator || message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 await client.FetchDefaultTTSVoice();
             }
@@ -104,12 +84,7 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsModerator || message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 await client.FetchRedemptions();
             }
@@ -127,12 +102,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsModerator || message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 _obsManager.ClearCache();
                 _logger.Information("Cleared the cache used for OBS.");
@@ -144,20 +114,10 @@ namespace TwitchChatTTS.Chat.Commands
 
             public bool AcceptCustomPermission { get => true; }
 
-            public bool CheckDefaultPermissions(ChatMessage message)
-            {
-                return message.IsModerator || message.IsBroadcaster;
-            }
-
-            public async Task Execute(IDictionary<string, string> values, ChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
             {
                 await client.FetchPermissions();
             }
-        }
-
-        public bool CheckDefaultPermissions(ChatMessage message)
-        {
-            return message.IsModerator || message.IsBroadcaster;
         }
     }
 }

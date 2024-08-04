@@ -1,5 +1,6 @@
 using Serilog;
 using TwitchChatTTS.Chat.Commands.Parameters;
+using TwitchChatTTS.Twitch.Socket.Messages;
 
 namespace TwitchChatTTS.Chat.Commands
 {
@@ -8,15 +9,18 @@ namespace TwitchChatTTS.Chat.Commands
         public interface ICommandBuilder
         {
             ICommandSelector Build();
+            ICommandBuilder AddPermission(string path);
+            ICommandBuilder AddAlias(string alias, string child);
             void Clear();
             ICommandBuilder CreateCommandTree(string name, Action<ICommandBuilder> callback);
             ICommandBuilder CreateCommand(IChatPartialCommand command);
             ICommandBuilder CreateStaticInputParameter(string value, Action<ICommandBuilder> callback, bool optional = false);
+            ICommandBuilder CreateMentionParameter(string name, bool enabled, bool optional = false);
             ICommandBuilder CreateObsTransformationParameter(string name, bool optional = false);
             ICommandBuilder CreateStateParameter(string name, bool optional = false);
             ICommandBuilder CreateUnvalidatedParameter(string name, bool optional = false);
             ICommandBuilder CreateVoiceNameParameter(string name, bool enabled, bool optional = false);
-            
+
         }
 
         public sealed class CommandBuilder : ICommandBuilder
@@ -36,6 +40,25 @@ namespace TwitchChatTTS.Chat.Commands
                 Clear();
             }
 
+
+            public ICommandBuilder AddPermission(string path)
+            {
+                if (_current == _root)
+                    throw new Exception("Cannot add permissions without a command name.");
+                
+                _current.AddPermission(path);
+                return this;
+            }
+
+            public ICommandBuilder AddAlias(string alias, string child) {
+                if (_current == _root)
+                    throw new Exception("Cannot add aliases without a command name.");
+                if (_current.Children == null || !_current.Children.Any())
+                    throw new Exception("Cannot add alias if this has no parameter.");
+                
+                _current.AddAlias(alias, child);
+                return this;
+            }
 
             public ICommandSelector Build()
             {
@@ -86,6 +109,19 @@ namespace TwitchChatTTS.Chat.Commands
                     _current = node;
                     callback(this);
                 });
+                return this;
+            }
+
+            public ICommandBuilder CreateMentionParameter(string name, bool enabled, bool optional = false)
+            {
+                if (_root == _current)
+                    throw new Exception("Cannot create a parameter without a command name.");
+                if (optional && _current.IsRequired() && _current.Command == null)
+                    throw new Exception("Cannot create a optional parameter without giving the command to the last node with required parameter.");
+
+                var node = _current.CreateUserInput(new MentionParameter(name, optional));
+                _logger.Debug($"Creating obs transformation parameter '{name}'");
+                _current = node;
                 return this;
             }
 
@@ -164,9 +200,8 @@ namespace TwitchChatTTS.Chat.Commands
 
         public interface ICommandSelector
         {
-            CommandSelectorResult GetBestMatch(string[] args);
+            CommandSelectorResult GetBestMatch(string[] args, ChannelChatMessage message);
             IDictionary<string, CommandParameter> GetNonStaticArguments(string[] args, string path);
-            CommandValidationResult Validate(string[] args, string path);
         }
 
         public sealed class CommandSelector : ICommandSelector
@@ -178,67 +213,36 @@ namespace TwitchChatTTS.Chat.Commands
                 _root = root;
             }
 
-            public CommandSelectorResult GetBestMatch(string[] args)
+            public CommandSelectorResult GetBestMatch(string[] args, ChannelChatMessage message)
             {
-                return GetBestMatch(_root, args, null, string.Empty);
+                return GetBestMatch(_root, message, args, null, string.Empty, null);
             }
 
-            private CommandSelectorResult GetBestMatch(CommandNode node, IEnumerable<string> args, IChatPartialCommand? match, string path)
+            private CommandSelectorResult GetBestMatch(CommandNode node, ChannelChatMessage message, IEnumerable<string> args, IChatPartialCommand? match, string path, string[]? permissions)
             {
                 if (node == null || !args.Any())
-                    return new CommandSelectorResult(match, path);
+                    return new CommandSelectorResult(match, path, permissions);
                 if (!node.Children.Any())
-                    return new CommandSelectorResult(node.Command ?? match, path);
+                    return new CommandSelectorResult(node.Command ?? match, path, permissions);
 
                 var argument = args.First();
                 var argumentLower = argument.ToLower();
                 foreach (var child in node.Children)
                 {
+                    var perms = child.Permissions != null ? (permissions ?? []).Union(child.Permissions).Distinct().ToArray() : permissions;
                     if (child.Parameter.GetType() == typeof(StaticParameter))
                     {
                         if (child.Parameter.Name.ToLower() == argumentLower)
-                        {
-                            return GetBestMatch(child, args.Skip(1), child.Command ?? match, (path.Length == 0 ? string.Empty : path + ".") + child.Parameter.Name.ToLower());
-                        }
+                            return GetBestMatch(child, message, args.Skip(1), child.Command ?? match, (path.Length == 0 ? string.Empty : path + ".") + child.Parameter.Name.ToLower(), perms);
                         continue;
                     }
-
-                    return GetBestMatch(child, args.Skip(1), child.Command ?? match, (path.Length == 0 ? string.Empty : path + ".") + "*");
+                    if ((!child.Parameter.Optional || child.Parameter.Validate(argument, message)) && child.Command != null)
+                        return GetBestMatch(child, message, args.Skip(1), child.Command, (path.Length == 0 ? string.Empty : path + ".") + "*", perms);
+                    if (!child.Parameter.Optional)
+                        return GetBestMatch(child, message, args.Skip(1), match, (path.Length == 0 ? string.Empty : path + ".") + "*", permissions);
                 }
 
-                return new CommandSelectorResult(match, path);
-            }
-
-            public CommandValidationResult Validate(string[] args, string path)
-            {
-                CommandNode? current = _root;
-                var parts = path.Split('.');
-                if (args.Length < parts.Length)
-                    throw new Exception($"Command path too long for the number of arguments passed in [path: {path}][parts: {parts.Length}][args count: {args.Length}]");
-
-                for (var i = 0; i < parts.Length; i++)
-                {
-                    var part = parts[i];
-                    if (part == "*")
-                    {
-                        current = current.Children.FirstOrDefault(n => n.Parameter.GetType() != typeof(StaticParameter));
-                        if (current == null)
-                            throw new Exception($"Cannot find command path [path: {path}][subpath: {part}]");
-
-                        if (!current.Parameter.Validate(args[i]))
-                        {
-                            return new CommandValidationResult(false, args[i]);
-                        }
-                    }
-                    else
-                    {
-                        current = current.Children.FirstOrDefault(n => n.Parameter.GetType() == typeof(StaticParameter) && n.Parameter.Name == part);
-                        if (current == null)
-                            throw new Exception($"Cannot find command path [path: {path}][subpath: {part}]");
-                    }
-                }
-
-                return new CommandValidationResult(true, null);
+                return new CommandSelectorResult(match, path, permissions);
             }
 
             public IDictionary<string, CommandParameter> GetNonStaticArguments(string[] args, string path)
@@ -276,11 +280,13 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public IChatPartialCommand? Command { get; set; }
             public string Path { get; set; }
+            public string[]? Permissions { get; set; }
 
-            public CommandSelectorResult(IChatPartialCommand? command, string path)
+            public CommandSelectorResult(IChatPartialCommand? command, string path, string[]? permissions)
             {
                 Command = command;
                 Path = path;
+                Permissions = permissions;
             }
         }
 
@@ -300,6 +306,7 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public IChatPartialCommand? Command { get; private set; }
             public CommandParameter Parameter { get; }
+            public string[]? Permissions { get; private set; }
             public IList<CommandNode> Children { get => _children.AsReadOnly(); }
 
             private IList<CommandNode> _children;
@@ -308,8 +315,33 @@ namespace TwitchChatTTS.Chat.Commands
             {
                 Parameter = parameter;
                 _children = new List<CommandNode>();
+                Permissions = null;
             }
 
+
+            public void AddPermission(string path)
+            {
+                if (Permissions == null)
+                    Permissions = [path];
+                else
+                    Permissions = Permissions.Union([path]).ToArray();
+            }
+
+            public CommandNode AddAlias(string alias, string child) {
+                var target = _children.FirstOrDefault(c => c.Parameter.Name == child);
+                if (target == null)
+                    throw new Exception($"Cannot find child parameter [parameter: {child}][alias: {alias}]");
+                if (target.Parameter.GetType() != typeof(StaticParameter))
+                    throw new Exception("Command aliases can only be used on static parameters.");
+                if (Children.FirstOrDefault(n => n.Parameter.Name == alias) != null)
+                    throw new Exception("Failed to create a command alias - name is already in use.");
+
+                var clone = target.MemberwiseClone() as CommandNode;
+                var node = new CommandNode(new StaticParameter(alias, alias, target.Parameter.Optional));
+                node._children = target._children;
+                _children.Add(node);
+                return this;
+            }
 
             public CommandNode CreateCommand(IChatPartialCommand command)
             {

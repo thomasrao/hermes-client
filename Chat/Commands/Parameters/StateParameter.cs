@@ -1,3 +1,5 @@
+using TwitchChatTTS.Twitch.Socket.Messages;
+
 namespace TwitchChatTTS.Chat.Commands.Parameters
 {
     public class StateParameter : CommandParameter
@@ -8,7 +10,7 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
         {
         }
 
-        public override bool Validate(string value)
+        public override bool Validate(string value, ChannelChatMessage message)
         {
             return _values.Contains(value.ToLower());
         }

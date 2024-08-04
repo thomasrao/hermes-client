@@ -134,7 +134,7 @@ namespace TwitchChatTTS.OBS.Socket
             }
             catch (WebSocketException wse) when (wse.Message.Contains("502"))
             {
-                _logger.Error("OBS websocket server cannot be found. Be sure the server is on by looking at OBS > Tools > Websocket Server Settings.");
+                _logger.Error($"OBS websocket server cannot be found. Be sure the server is on by looking at OBS > Tools > Websocket Server Settings [code: {wse.ErrorCode}]");
             }
             catch (Exception ex)
             {

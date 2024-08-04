@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Hermes.Socket;
-using TwitchLib.Client.Models;
+using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
@@ -44,7 +44,7 @@ namespace TwitchChatTTS.Chat.Commands
         }
 
 
-        public async Task<ChatCommandResult> Execute(string arg, ChatMessage message, IEnumerable<string> groups)
+        public async Task<ChatCommandResult> Execute(string arg, ChannelChatMessage message, IEnumerable<string> groups)
         {
             if (string.IsNullOrWhiteSpace(arg))
                 return ChatCommandResult.Unknown;
@@ -62,7 +62,7 @@ namespace TwitchChatTTS.Chat.Commands
             string[] args = parts.ToArray();
             string com = args.First().ToLower();
 
-            CommandSelectorResult selectorResult = _commandSelector.GetBestMatch(args);
+            CommandSelectorResult selectorResult = _commandSelector.GetBestMatch(args, message);
             if (selectorResult.Command == null)
             {
                 _logger.Warning($"Could not match '{arg}' to any command.");
@@ -71,31 +71,27 @@ namespace TwitchChatTTS.Chat.Commands
 
             // Check if command can be executed by this chatter.
             var command = selectorResult.Command;
-            long chatterId = long.Parse(message.UserId);
+            long chatterId = long.Parse(message.ChatterUserId);
             if (chatterId != _user.OwnerId)
             {
-                var executable = command.AcceptCustomPermission ? CanExecute(chatterId, groups, com) : null;
-                if (executable == false)
+                bool executable = command.AcceptCustomPermission ? CanExecute(chatterId, groups, $"tts.command.{com}", selectorResult.Permissions) : false;
+                if (!executable)
                 {
                     _logger.Debug($"Denied permission to use command [chatter id: {chatterId}][command: {com}]");
                     return ChatCommandResult.Permission;
                 }
-                else if (executable == null && !command.CheckDefaultPermissions(message))
-                {
-                    _logger.Debug($"Chatter is missing default permission to execute command named '{com}' [args: {arg}][command type: {command.GetType().Name}][chatter: {message.Username}][chatter id: {message.UserId}]");
-                    return ChatCommandResult.Permission;
-                }
             }
 
-            // Check if the arguments are correct.
+            // Check if the arguments are valid.
             var arguments = _commandSelector.GetNonStaticArguments(args, selectorResult.Path);
             foreach (var entry in arguments)
             {
                 var parameter = entry.Value;
                 var argument = entry.Key;
-                if (!parameter.Validate(argument))
+                // Optional parameters were validated while fetching this command.
+                if (!parameter.Optional && !parameter.Validate(argument, message))
                 {
-                    _logger.Warning($"Command failed due to an argument being invalid [argument name: {parameter.Name}][argument value: {argument}][arguments: {arg}][command type: {command.GetType().Name}][chatter: {message.Username}][chatter id: {message.UserId}]");
+                    _logger.Warning($"Command failed due to an argument being invalid [argument name: {parameter.Name}][argument value: {argument}][arguments: {arg}][command type: {command.GetType().Name}][chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
                     return ChatCommandResult.Syntax;
                 }
             }
@@ -107,18 +103,18 @@ namespace TwitchChatTTS.Chat.Commands
             }
             catch (Exception e)
             {
-                _logger.Error(e, $"Command '{arg}' failed [args: {arg}][command type: {command.GetType().Name}][chatter: {message.Username}][chatter id: {message.UserId}]");
+                _logger.Error(e, $"Command '{arg}' failed [args: {arg}][command type: {command.GetType().Name}][chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
                 return ChatCommandResult.Fail;
             }
 
-            _logger.Information($"Executed the {com} command [args: {arg}][command type: {command.GetType().Name}][chatter: {message.Username}][chatter id: {message.UserId}]");
+            _logger.Information($"Executed the {com} command [args: {arg}][command type: {command.GetType().Name}][chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
             return ChatCommandResult.Success;
         }
 
-        private bool? CanExecute(long chatterId, IEnumerable<string> groups, string path)
+        private bool CanExecute(long chatterId, IEnumerable<string> groups, string path, string[]? additionalPaths)
         {
-            _logger.Debug($"Checking for permission [chatter id: {chatterId}][group: {string.Join(", ", groups)}][path: {path}]");
-            return _permissionManager.CheckIfAllowed(groups, path);
+            _logger.Debug($"Checking for permission [chatter id: {chatterId}][group: {string.Join(", ", groups)}][path: {path}]{(additionalPaths != null ? "[paths: " + string.Join('|', additionalPaths) + "]" : string.Empty)}");
+            return _permissionManager.CheckIfAllowed(groups, path) != false && (additionalPaths == null || additionalPaths.All(p => _permissionManager.CheckIfAllowed(groups, p) != false));
         }
     }
 }

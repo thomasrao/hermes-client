@@ -1,226 +1,59 @@
 using System.Text.Json;
 using TwitchChatTTS.Helpers;
 using Serilog;
-using TwitchChatTTS;
-using TwitchLib.Api.Core.Exceptions;
-using TwitchLib.Client.Events;
-using TwitchLib.Client.Models;
-using TwitchLib.Communication.Events;
-using TwitchLib.PubSub.Interfaces;
-using TwitchLib.Client.Interfaces;
-using TwitchChatTTS.Twitch.Redemptions;
+using TwitchChatTTS.Twitch.Socket.Messages;
+using System.Net.Http.Json;
+using System.Net;
 
 public class TwitchApiClient
 {
-    private readonly RedemptionManager _redemptionManager;
-    private readonly HermesApiClient _hermesApiClient;
-    private readonly ITwitchClient _client;
-    private readonly ITwitchPubSub _publisher;
-    private readonly User _user;
-    private readonly Configuration _configuration;
-    private readonly TwitchBotAuth _token;
     private readonly ILogger _logger;
     private readonly WebClientWrap _web;
-    private bool _initialized;
-    private string _broadcasterId;
 
 
     public TwitchApiClient(
-        ITwitchClient twitchClient,
-        ITwitchPubSub twitchPublisher,
-        RedemptionManager redemptionManager,
-        HermesApiClient hermesApiClient,
-        User user,
-        Configuration configuration,
-        TwitchBotAuth token,
         ILogger logger
     )
     {
-        _redemptionManager = redemptionManager;
-        _hermesApiClient = hermesApiClient;
-        _client = twitchClient;
-        _publisher = twitchPublisher;
-        _user = user;
-        _configuration = configuration;
-        _token = token;
         _logger = logger;
-        _initialized = false;
-        _broadcasterId = string.Empty;
 
         _web = new WebClientWrap(new JsonSerializerOptions()
         {
             PropertyNameCaseInsensitive = false,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
         });
-        if (!string.IsNullOrWhiteSpace(_configuration.Hermes?.Token))
-            _web.AddHeader("x-api-key", _configuration.Hermes.Token.Trim());
     }
 
-    public async Task<bool> Authorize(string broadcasterId)
+    public async Task<EventResponse<EventSubscriptionMessage>?> CreateEventSubscription(string type, string version, string userId)
     {
-        try
+        var conditions = new Dictionary<string, string>() { { "user_id", userId }, { "broadcaster_user_id", userId }, { "moderator_user_id", userId } };
+        var subscriptionData = new EventSubscriptionMessage(type, version, "https://hermes.goblincaves.com/api/account/authorize", "isdnmjfopsdfmsf4390", conditions);
+        var response = await _web.Post("https://api.twitch.tv/helix/eventsub/subscriptions", subscriptionData);
+        if (response.StatusCode == HttpStatusCode.Accepted)
         {
-            _logger.Debug($"Attempting to authorize Twitch API [id: {broadcasterId}]");
-            var authorize = await _web.GetJson<TwitchBotAuth>($"https://{HermesApiClient.BASE_URL}/api/account/reauthorize");
-            if (authorize != null && broadcasterId == authorize.BroadcasterId)
-            {
-                _token.AccessToken = authorize.AccessToken;
-                _token.RefreshToken = authorize.RefreshToken;
-                _token.UserId = authorize.UserId;
-                _token.BroadcasterId = authorize.BroadcasterId;
-                _token.ExpiresIn = authorize.ExpiresIn;
-                _token.UpdatedAt = DateTime.Now;
-                _logger.Information("Updated Twitch API tokens.");
-                _logger.Debug($"Twitch API Auth data [user id: {_token.UserId}][id: {_token.BroadcasterId}][expires in: {_token.ExpiresIn}][expires at: {_token.ExpiresAt.ToShortTimeString()}]");
-            }
-            else if (authorize != null)
-            {
-                _logger.Error("Twitch API Authorization failed: " + authorize.AccessToken + " | " + authorize.RefreshToken + " | " + authorize.UserId + " | " + authorize.BroadcasterId);
-                return false;
-            }
-            _broadcasterId = broadcasterId;
-            _logger.Debug($"Authorized Twitch API [id: {broadcasterId}]");
-            return true;
+            _logger.Debug("Twitch API call [type: create event subscription]: " + await response.Content.ReadAsStringAsync());
+            return await response.Content.ReadFromJsonAsync(typeof(EventResponse<EventSubscriptionMessage>)) as EventResponse<EventSubscriptionMessage>;
         }
-        catch (HttpResponseException e)
-        {
-            if (string.IsNullOrWhiteSpace(_configuration.Hermes!.Token))
-                _logger.Error("No Hermes API key found. Enter it into the configuration file.");
-            else
-                _logger.Error("Invalid Hermes API key. Double check the token. HTTP Error Code: " + e.HttpResponse.StatusCode);
-        }
-        catch (JsonException)
-        {
-            _logger.Debug($"Failed to Authorize Twitch API due to JSON error [id: {broadcasterId}]");
-        }
-        catch (Exception e)
-        {
-            _logger.Error(e, "Failed to authorize to Twitch API.");
-        }
-        return false;
+        _logger.Warning("Twitch api failed to create event subscription: " + await response.Content.ReadAsStringAsync());
+        return null;
     }
 
-    public async Task Connect()
+    public async Task<EventResponse<EventSubscriptionMessage>?> CreateEventSubscription(string type, string version, string sessionId, string userId)
     {
-        _client.Connect();
-        await _publisher.ConnectAsync();
-    }
-
-    public void InitializeClient(string username, IEnumerable<string> channels)
-    {
-        ConnectionCredentials credentials = new ConnectionCredentials(username, _token!.AccessToken);
-        _client.Initialize(credentials, channels.Distinct().ToList());
-
-        if (_initialized)
+        var conditions = new Dictionary<string, string>() { { "user_id", userId }, { "broadcaster_user_id", userId }, { "moderator_user_id", userId } };
+        var subscriptionData = new EventSubscriptionMessage(type, version, sessionId, conditions);
+        var response = await _web.Post("https://api.twitch.tv/helix/eventsub/subscriptions", subscriptionData);
+        if (response.StatusCode == HttpStatusCode.Accepted)
         {
-            _logger.Debug("Twitch API client has already been initialized.");
-            return;
+            _logger.Debug("Twitch API call [type: create event subscription]: " + await response.Content.ReadAsStringAsync());
+            return await response.Content.ReadFromJsonAsync(typeof(EventResponse<EventSubscriptionMessage>)) as EventResponse<EventSubscriptionMessage>;
         }
-
-        _initialized = true;
-
-        _client.OnJoinedChannel += async Task (object? s, OnJoinedChannelArgs e) =>
-        {
-            _logger.Information("Joined channel: " + e.Channel);
-        };
-
-        _client.OnConnected += async Task (object? s, OnConnectedArgs e) =>
-        {
-            _logger.Information("Twitch API client connected.");
-        };
-
-        _client.OnIncorrectLogin += async Task (object? s, OnIncorrectLoginArgs e) =>
-        {
-            _logger.Error(e.Exception, "Incorrect Login on Twitch API client.");
-
-            _logger.Information("Attempting to re-authorize.");
-            await Authorize(_broadcasterId);
-            _client.SetConnectionCredentials(new ConnectionCredentials(_user.TwitchUsername, _token!.AccessToken));
-
-            await Task.Delay(TimeSpan.FromSeconds(3));
-            await _client.ReconnectAsync();
-        };
-
-        _client.OnConnectionError += async Task (object? s, OnConnectionErrorArgs e) =>
-        {
-            _logger.Error("Connection Error: " + e.Error.Message + " (" + e.Error.GetType().Name + ")");
-
-            _logger.Information("Attempting to re-authorize.");
-            await Authorize(_broadcasterId);
-        };
-
-        _client.OnError += async Task (object? s, OnErrorEventArgs e) =>
-        {
-            _logger.Error(e.Exception, "Twitch API client error.");
-        };
-
-        _client.OnDisconnected += async Task (s, e) => _logger.Warning("Twitch API client disconnected.");
+        _logger.Error("Twitch api failed to create event subscription: " + await response.Content.ReadAsStringAsync());
+        return null;
     }
 
-    public void InitializePublisher()
-    {
-        _publisher.OnPubSubServiceConnected += async (s, e) =>
-        {
-            _publisher.ListenToChannelPoints(_token.BroadcasterId);
-            _publisher.ListenToFollows(_token.BroadcasterId);
-
-            await _publisher.SendTopicsAsync(_token.AccessToken);
-            _logger.Information("Twitch PubSub has been connected.");
-        };
-
-        _publisher.OnFollow += (s, e) =>
-        {
-            _logger.Information($"New Follower [name: {e.DisplayName}][username: {e.Username}]");
-        };
-
-        _publisher.OnChannelPointsRewardRedeemed += async (s, e) =>
-        {
-            _logger.Information($"Channel Point Reward Redeemed [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
-
-            try
-            {
-                var actions = _redemptionManager.Get(e.RewardRedeemed.Redemption.Reward.Id);
-                if (!actions.Any())
-                {
-                    _logger.Debug($"No redemable actions for this redeem was found [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
-                    return;
-                }
-                _logger.Debug($"Found {actions.Count} actions for this Twitch channel point redemption [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
-
-                foreach (var action in actions)
-                    try
-                    {
-                        await _redemptionManager.Execute(action, e.RewardRedeemed.Redemption.User.DisplayName, long.Parse(e.RewardRedeemed.Redemption.User.Id));
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
-                    }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed to fetch the redeemable actions for a redemption [redeem: {e.RewardRedeemed.Redemption.Reward.Title}][redeem id: {e.RewardRedeemed.Redemption.Reward.Id}][transaction: {e.RewardRedeemed.Redemption.Id}]");
-            }
-        };
-
-        _publisher.OnPubSubServiceClosed += async (s, e) =>
-        {
-            _logger.Warning("Twitch PubSub ran into a service close. Attempting to connect again.");
-            //await Task.Delay(Math.Min(3000 + (1 << psConnectionFailures), 120000));
-            var authorized = await Authorize(_broadcasterId);
-
-            var twitchBotData = await _hermesApiClient.FetchTwitchBotToken();
-            if (twitchBotData == null)
-            {
-                Console.WriteLine("The API is down. Contact the owner.");
-                return;
-            }
-            await _publisher.ConnectAsync();
-        };
-    }
-
-    public void AddOnNewMessageReceived(AsyncEventHandler<OnMessageReceivedArgs> handler)
-    {
-        _client.OnMessageReceived += handler;
+    public void Initialize(TwitchBotToken token) {
+        _web.AddHeader("Authorization", "Bearer " + token.AccessToken);
+        _web.AddHeader("Client-Id", token.ClientId);
     }
 }

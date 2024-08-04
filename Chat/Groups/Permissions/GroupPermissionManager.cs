@@ -23,9 +23,11 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
             return res;
         }
 
-        public bool? CheckIfAllowed(IEnumerable<string> groups, string path) {
+        public bool? CheckIfAllowed(IEnumerable<string> groups, string path)
+        {
             bool overall = false;
-            foreach (var group in groups) {
+            foreach (var group in groups)
+            {
                 var result = CheckIfAllowed($"{group}.{path}");
                 if (result == false)
                     return false;
@@ -73,7 +75,7 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
         {
             if (path.Length == 0)
                 return node;
-            
+
             var parts = path.Split('.');
             var name = parts.First();
             var next = node.Children?.FirstOrDefault(n => n.Name == name);
@@ -87,61 +89,62 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
             }
             return Get(next, string.Join('.', parts.Skip(1)), edit);
         }
-    }
 
-    internal class PermissionNode
-    {
-        public string Name { get; }
-        public bool? Allow
+        private sealed class PermissionNode
         {
-            get
+            public string Name { get; }
+            public bool? Allow
             {
-                var current = this;
-                while (current._allow == null && current._parent != null)
-                    current = current._parent;
-                return current._allow;
-            }
-            set => _allow = value;
-        }
-        public int Priority;
-        internal PermissionNode? Parent { get => _parent; }
-        public IList<PermissionNode>? Children { get => _children == null ? null : new ReadOnlyCollection<PermissionNode>(_children); }
-
-        private bool? _allow;
-        private PermissionNode? _parent;
-        private IList<PermissionNode>? _children;
-
-
-        public PermissionNode(string name, PermissionNode? parent, bool? allow)
-        {
-            Name = name;
-            _parent = parent;
-            _allow = allow;
-        }
-
-        internal void Add(PermissionNode child)
-        {
-            if (_children == null)
-                _children = new List<PermissionNode>();
-            _children.Add(child);
-        }
-
-        internal void Clear() {
-            if (_children != null)
-                _children.Clear();
-        }
-
-        public void Remove(string name)
-        {
-            if (_children == null || !_children.Any())
-                return;
-
-            for (var i = 0; i < _children.Count; i++)
-            {
-                if (_children[i].Name == name)
+                get
                 {
-                    _children.RemoveAt(i);
-                    break;
+                    var current = this;
+                    while (current._allow == null && current._parent != null)
+                        current = current._parent;
+                    return current._allow;
+                }
+                set => _allow = value;
+            }
+
+            internal PermissionNode? Parent { get => _parent; }
+            public IList<PermissionNode>? Children { get => _children == null ? null : new ReadOnlyCollection<PermissionNode>(_children); }
+
+            private bool? _allow;
+            private PermissionNode? _parent;
+            private IList<PermissionNode>? _children;
+
+
+            public PermissionNode(string name, PermissionNode? parent, bool? allow)
+            {
+                Name = name;
+                _parent = parent;
+                _allow = allow;
+            }
+
+            internal void Add(PermissionNode child)
+            {
+                if (_children == null)
+                    _children = new List<PermissionNode>();
+                _children.Add(child);
+            }
+
+            internal void Clear()
+            {
+                if (_children != null)
+                    _children.Clear();
+            }
+
+            public void Remove(string name)
+            {
+                if (_children == null || !_children.Any())
+                    return;
+
+                for (var i = 0; i < _children.Count; i++)
+                {
+                    if (_children[i].Name == name)
+                    {
+                        _children.RemoveAt(i);
+                        break;
+                    }
                 }
             }
         }

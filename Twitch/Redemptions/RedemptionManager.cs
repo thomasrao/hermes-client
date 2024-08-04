@@ -17,6 +17,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
         private readonly User _user;
         private readonly OBSSocketClient _obs;
         private readonly HermesSocketClient _hermes;
+        private readonly AudioPlaybackEngine _playback;
         private readonly ILogger _logger;
         private readonly Random _random;
         private bool _isReady;
@@ -26,12 +27,14 @@ namespace TwitchChatTTS.Twitch.Redemptions
             User user,
             [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
             [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
+            AudioPlaybackEngine playback,
             ILogger logger)
         {
             _store = new Dictionary<string, IList<RedeemableAction>>();
             _user = user;
             _obs = (obs as OBSSocketClient)!;
             _hermes = (hermes as HermesSocketClient)!;
+            _playback = playback;
             _logger = logger;
             _random = new Random();
             _isReady = false;
@@ -185,7 +188,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
                             _logger.Warning($"Cannot find audio file for Twitch channel point redeem [file: {action.Data["file_path"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                             return;
                         }
-                        AudioPlaybackEngine.Instance.PlaySound(action.Data["file_path"]);
+                        _playback.PlaySound(action.Data["file_path"]);
                         _logger.Debug($"Played an audio file for channel point redeem [file: {action.Data["file_path"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
                         break;
                     default:

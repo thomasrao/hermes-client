@@ -10,16 +10,10 @@ using YamlDotNet.Serialization.NamingConventions;
 using TwitchChatTTS.Seven.Socket;
 using TwitchChatTTS.OBS.Socket.Handlers;
 using TwitchChatTTS.Seven.Socket.Handlers;
-using TwitchLib.Client.Interfaces;
-using TwitchLib.Client;
-using TwitchLib.PubSub.Interfaces;
-using TwitchLib.PubSub;
-using TwitchLib.Communication.Interfaces;
 using TwitchChatTTS.Seven.Socket.Managers;
 using TwitchChatTTS.Hermes.Socket.Handlers;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.Hermes.Socket.Managers;
-using TwitchChatTTS.Chat.Commands.Parameters;
 using TwitchChatTTS.Chat.Commands;
 using System.Text.Json;
 using Serilog;
@@ -31,6 +25,9 @@ using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Chat.Emotes;
 using HermesSocketLibrary.Requests.Callbacks;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
+using TwitchChatTTS.Twitch.Socket;
+using TwitchChatTTS.Twitch.Socket.Messages;
+using TwitchChatTTS.Twitch.Socket.Handlers;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -61,6 +58,7 @@ var logger = new LoggerConfiguration()
 
 s.AddSerilog(logger);
 s.AddSingleton<User>(new User());
+s.AddSingleton<AudioPlaybackEngine>();
 s.AddSingleton<ICallbackManager<HermesRequestData>, CallbackManager<HermesRequestData>>();
 
 s.AddSingleton<JsonSerializerOptions>(new JsonSerializerOptions()
@@ -82,13 +80,9 @@ s.AddSingleton<IGroupPermissionManager, GroupPermissionManager>();
 s.AddSingleton<CommandManager>();
 
 s.AddSingleton<TTSPlayer>();
-s.AddSingleton<ChatMessageHandler>();
 s.AddSingleton<RedemptionManager>();
 s.AddSingleton<HermesApiClient>();
 s.AddSingleton<TwitchBotAuth>();
-s.AddTransient<IClient, TwitchLib.Communication.Clients.WebSocketClient>();
-s.AddTransient<ITwitchClient, TwitchClient>();
-s.AddTransient<ITwitchPubSub, TwitchPubSub>();
 s.AddSingleton<TwitchApiClient>();
 
 s.AddSingleton<SevenApiClient>();
@@ -114,11 +108,25 @@ s.AddKeyedSingleton<IWebSocketHandler, EndOfStreamHandler>("7tv");
 s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, SevenMessageTypeManager>("7tv");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");
 
+// twitch websocket
+s.AddKeyedSingleton<SocketClient<TwitchWebsocketMessage>, TwitchWebsocketClient>("twitch");
+
+s.AddKeyedSingleton<ITwitchSocketHandler, SessionWelcomeHandler>("twitch");
+s.AddKeyedSingleton<ITwitchSocketHandler, SessionReconnectHandler>("twitch");
+s.AddKeyedSingleton<ITwitchSocketHandler, NotificationHandler>("twitch");
+
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelBanHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatMessageHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatClearUserHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatClearHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatDeleteMessageHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelCustomRedemptionHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelSubscriptionHandler>("twitch-notifications");
+
 // hermes websocket
 s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes");
 s.AddKeyedSingleton<IWebSocketHandler, LoginAckHandler>("hermes");
 s.AddKeyedSingleton<IWebSocketHandler, RequestAckHandler>("hermes");
-//s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes");
 
 s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, HermesMessageTypeManager>("hermes");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, HermesSocketClient>("hermes");

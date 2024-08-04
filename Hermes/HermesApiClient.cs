@@ -3,29 +3,68 @@ using TwitchChatTTS;
 using System.Text.Json;
 using HermesSocketLibrary.Requests.Messages;
 using TwitchChatTTS.Hermes;
-using TwitchChatTTS.Chat.Groups.Permissions;
-using TwitchChatTTS.Chat.Groups;
-using HermesSocketLibrary.Socket.Data;
+using Serilog;
 
 public class HermesApiClient
 {
+    private readonly TwitchBotAuth _token;
     private readonly WebClientWrap _web;
+    private readonly ILogger _logger;
     
     public const string BASE_URL = "tomtospeech.com";
 
-    public HermesApiClient(Configuration configuration)
+    public HermesApiClient(TwitchBotAuth token, Configuration configuration, ILogger logger)
     {
         if (string.IsNullOrWhiteSpace(configuration.Hermes?.Token))
         {
             throw new Exception("Ensure you have written your API key in \".token\" file, in the same folder as this application.");
         }
 
+        _token = token;
         _web = new WebClientWrap(new JsonSerializerOptions()
         {
             PropertyNameCaseInsensitive = false,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
         });
         _web.AddHeader("x-api-key", configuration.Hermes.Token);
+        _logger = logger;
+    }
+
+
+    public async Task<bool> AuthorizeTwitch()
+    {
+        try
+        {
+            _logger.Debug($"Attempting to authorize Twitch API...");
+            var authorize = await _web.GetJson<TwitchBotAuth>($"https://{HermesApiClient.BASE_URL}/api/account/reauthorize");
+            if (authorize != null)
+            {
+                _token.AccessToken = authorize.AccessToken;
+                _token.RefreshToken = authorize.RefreshToken;
+                _token.UserId = authorize.UserId;
+                _token.BroadcasterId = authorize.BroadcasterId;
+                _token.ExpiresIn = authorize.ExpiresIn;
+                _token.UpdatedAt = DateTime.Now;
+                _logger.Information("Updated Twitch API tokens.");
+                _logger.Debug($"Twitch API Auth data [user id: {_token.UserId}][id: {_token.BroadcasterId}][expires in: {_token.ExpiresIn}][expires at: {_token.ExpiresAt.ToShortTimeString()}]");
+            }
+            else if (authorize != null)
+            {
+                _logger.Error("Twitch API Authorization failed: " + authorize.AccessToken + " | " + authorize.RefreshToken + " | " + authorize.UserId + " | " + authorize.BroadcasterId);
+                return false;
+            }
+            _logger.Debug($"Authorized Twitch API.");
+            return true;
+        }
+        catch (JsonException)
+        {
+            _logger.Debug($"Failed to Authorize Twitch API due to JSON error.");
+        }
+        catch (Exception e)
+        {
+            _logger.Error(e, "Failed to authorize to Twitch API.");
+        }
+        return false;
     }
 
     public async Task<TTSVersion?> GetLatestTTSVersion()

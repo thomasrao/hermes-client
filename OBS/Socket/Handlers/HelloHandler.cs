@@ -23,12 +23,14 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
         {
             if (data is not HelloMessage message || message == null)
                 return;
+            if (sender is not OBSSocketClient client)
+                return;
             
             string? password = string.IsNullOrWhiteSpace(_configuration.Obs?.Password) ? null : _configuration.Obs.Password.Trim();
             _logger.Verbose("OBS websocket password: " + password);
             if (message.Authentication == null || string.IsNullOrEmpty(password))
             {
-                await sender.Send(1, new IdentifyMessage(message.RpcVersion, null, 1023 | 262144));
+                await client.Send(1, new IdentifyMessage(message.RpcVersion, null, 1023 | 262144));
                 return;
             }
 
@@ -52,7 +54,7 @@ namespace TwitchChatTTS.OBS.Socket.Handlers
             }
 
             _logger.Verbose("Final hash: " + hash);
-            await sender.Send(1, new IdentifyMessage(message.RpcVersion, hash, 1023 | 262144));
+            await client.Send(1, new IdentifyMessage(message.RpcVersion, hash, 1023 | 262144));
         }
     }
 }

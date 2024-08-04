@@ -2,24 +2,23 @@ using NAudio.Wave;
 using NAudio.Extras;
 using NAudio.Wave.SampleProviders;
 
-public class AudioPlaybackEngine : IDisposable
+public sealed class AudioPlaybackEngine : IDisposable
 {
-    public static readonly AudioPlaybackEngine Instance = new AudioPlaybackEngine(44100, 2);
-
-    private readonly IWavePlayer outputDevice;
-    private readonly MixingSampleProvider mixer;
     public int SampleRate { get; }
+    
+    private readonly IWavePlayer _outputDevice;
+    private readonly MixingSampleProvider _mixer;
 
-    private AudioPlaybackEngine(int sampleRate = 44100, int channelCount = 2)
+    public AudioPlaybackEngine(int sampleRate = 44100, int channelCount = 2)
     {
         SampleRate = sampleRate;
-        outputDevice = new WaveOutEvent();
+        _outputDevice = new WaveOutEvent();
 
-        mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channelCount));
-        mixer.ReadFully = true;
+        _mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channelCount));
+        _mixer.ReadFully = true;
 
-        outputDevice.Init(mixer);
-        outputDevice.Play();
+        _outputDevice.Init(_mixer);
+        _outputDevice.Play();
     }
 
     private ISampleProvider ConvertToRightChannelCount(ISampleProvider? input)
@@ -27,11 +26,11 @@ public class AudioPlaybackEngine : IDisposable
         if (input == null)
             throw new NullReferenceException(nameof(input));
 
-        if (input.WaveFormat.Channels == mixer.WaveFormat.Channels)
+        if (input.WaveFormat.Channels == _mixer.WaveFormat.Channels)
             return input;
-        if (input.WaveFormat.Channels == 1 && mixer.WaveFormat.Channels == 2)
+        if (input.WaveFormat.Channels == 1 && _mixer.WaveFormat.Channels == 2)
             return new MonoToStereoSampleProvider(input);
-        if (input.WaveFormat.Channels == 2 && mixer.WaveFormat.Channels == 1)
+        if (input.WaveFormat.Channels == 2 && _mixer.WaveFormat.Channels == 1)
             return new StereoToMonoSampleProvider(input);
         throw new NotImplementedException("Not yet implemented this channel count conversion");
     }
@@ -89,26 +88,26 @@ public class AudioPlaybackEngine : IDisposable
 
     public void AddMixerInput(ISampleProvider input)
     {
-        mixer.AddMixerInput(input);
+        _mixer.AddMixerInput(input);
     }
 
     public void AddMixerInput(IWaveProvider input)
     {
-        mixer.AddMixerInput(input);
+        _mixer.AddMixerInput(input);
     }
 
     public void RemoveMixerInput(ISampleProvider sound)
     {
-        mixer.RemoveMixerInput(sound);
+        _mixer.RemoveMixerInput(sound);
     }
 
     public void AddOnMixerInputEnded(EventHandler<SampleProviderEventArgs> e)
     {
-        mixer.MixerInputEnded += e;
+        _mixer.MixerInputEnded += e;
     }
 
     public void Dispose()
     {
-        outputDevice.Dispose();
+        _outputDevice.Dispose();
     }
 }
