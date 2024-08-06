@@ -54,7 +54,8 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                 {
                     if (removing)
                     {
-                        if (_emotes.Get(o.Name) != o.Id) {
+                        if (_emotes.Get(o.Name) != o.Id)
+                        {
                             _logger.Warning("Mismatched emote found while removing a 7tv emote.");
                             continue;
                         }
@@ -63,7 +64,8 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
                     }
                     else if (updater != null)
                     {
-                        if (_emotes.Get(o.Name) != o.Id) {
+                        if (_emotes.Get(o.Name) != o.Id)
+                        {
                             _logger.Warning("Mismatched emote found while updating a 7tv emote.");
                             continue;
                         }

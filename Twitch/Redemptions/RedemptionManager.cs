@@ -11,7 +11,7 @@ using TwitchChatTTS.OBS.Socket.Data;
 
 namespace TwitchChatTTS.Twitch.Redemptions
 {
-    public class RedemptionManager
+    public class RedemptionManager : IRedemptionManager
     {
         private readonly IDictionary<string, IList<RedeemableAction>> _store;
         private readonly User _user;

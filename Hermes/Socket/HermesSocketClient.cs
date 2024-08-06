@@ -104,7 +104,8 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task FetchChatterIdentifiers() {
+        public async Task FetchChatterIdentifiers()
+        {
             await Send(3, new RequestMessage()
             {
                 Type = "get_chatter_ids",
@@ -112,7 +113,8 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task FetchDefaultTTSVoice() {
+        public async Task FetchDefaultTTSVoice()
+        {
             await Send(3, new RequestMessage()
             {
                 Type = "get_default_tts_voice",
@@ -120,7 +122,8 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task FetchEmotes() {
+        public async Task FetchEmotes()
+        {
             await Send(3, new RequestMessage()
             {
                 Type = "get_emotes",
@@ -128,7 +131,8 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task FetchEnabledTTSVoices() {
+        public async Task FetchEnabledTTSVoices()
+        {
             await Send(3, new RequestMessage()
             {
                 Type = "get_enabled_tts_voices",
@@ -136,7 +140,8 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task FetchTTSVoices() {
+        public async Task FetchTTSVoices()
+        {
             await Send(3, new RequestMessage()
             {
                 Type = "get_tts_voices",
@@ -144,7 +149,8 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task FetchTTSChatterVoices() {
+        public async Task FetchTTSChatterVoices()
+        {
             await Send(3, new RequestMessage()
             {
                 Type = "get_tts_users",
@@ -152,7 +158,8 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
-        public async Task FetchTTSWordFilters() {
+        public async Task FetchTTSWordFilters()
+        {
             await Send(3, new RequestMessage()
             {
                 Type = "get_tts_word_filters",

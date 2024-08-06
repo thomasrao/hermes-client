@@ -43,5 +43,15 @@ namespace TwitchChatTTS.Helpers
         {
             return await _client.PostAsJsonAsync(uri, new object(), _options);
         }
+
+        public async Task<T?> Delete<T>(string uri)
+        {
+            return await _client.DeleteFromJsonAsync<T>(uri, _options);
+        }
+
+        public async Task<HttpResponseMessage> Delete(string uri)
+        {
+            return await _client.DeleteAsync(uri);
+        }
     }
 }

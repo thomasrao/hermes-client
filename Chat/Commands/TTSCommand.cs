@@ -1,5 +1,8 @@
+using CommonSocketLibrary.Abstract;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
+using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
@@ -7,13 +10,21 @@ namespace TwitchChatTTS.Chat.Commands
 {
     public class TTSCommand : IChatCommand
     {
+        private readonly TwitchWebsocketClient _twitch;
         private readonly User _user;
+        private readonly TwitchApiClient _client;
         private readonly ILogger _logger;
 
 
-        public TTSCommand(User user, ILogger logger)
+        public TTSCommand(
+            [FromKeyedServices("twitch")] SocketClient<TwitchWebsocketMessage> twitch,
+            User user,
+            TwitchApiClient client,
+            ILogger logger)
         {
+            _twitch = (twitch as TwitchWebsocketClient)!;
             _user = user;
+            _client = client;
             _logger = logger;
         }
 
@@ -51,7 +62,19 @@ namespace TwitchChatTTS.Chat.Commands
                 })
                 .AddAlias("off", "disable")
                 .AddAlias("disabled", "disable")
-                .AddAlias("false", "disable");
+                .AddAlias("false", "disable")
+                .CreateStaticInputParameter("join", b =>
+                {
+                    b.CreateMentionParameter("mention", true)
+                        .AddPermission("tts.commands.tts.join")
+                        .CreateCommand(new JoinRoomCommand(_twitch, _client, _user, _logger));
+                })
+                .CreateStaticInputParameter("leave", b =>
+                {
+                    b.CreateMentionParameter("mention", true)
+                        .AddPermission("tts.commands.tts.leave")
+                        .CreateCommand(new LeaveRoomCommand(_twitch, _client, _user, _logger));
+                });
             });
         }
 
@@ -119,7 +142,8 @@ namespace TwitchChatTTS.Chat.Commands
                 }
 
                 var voiceId = _user.VoicesAvailable.FirstOrDefault(v => v.Value.ToLower() == voiceNameLower).Key;
-                if (voiceId == null) {
+                if (voiceId == null)
+                {
                     _logger.Warning($"Could not find the identifier for the tts voice [voice name: {voiceName}]");
                     return;
                 }
@@ -155,6 +179,95 @@ namespace TwitchChatTTS.Chat.Commands
 
                 await client.UpdateTTSVoiceState(voiceId, _state);
                 _logger.Information($"Changed state for TTS voice [voice: {voiceName}][state: {_state}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
+            }
+        }
+
+        private sealed class JoinRoomCommand : IChatPartialCommand
+        {
+            private readonly TwitchWebsocketClient _twitch;
+            private readonly TwitchApiClient _client;
+            private readonly User _user;
+            private ILogger _logger;
+
+            public bool AcceptCustomPermission { get => true; }
+
+            public JoinRoomCommand(
+                [FromKeyedServices("twitch")] SocketClient<TwitchWebsocketMessage> twitch,
+                TwitchApiClient client,
+                User user,
+                ILogger logger
+            )
+            {
+                _twitch = (twitch as TwitchWebsocketClient)!;
+                _client = client;
+                _user = user;
+                _logger = logger;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            {
+                var mention = values["mention"].ToLower();
+                var fragment = message.Message.Fragments.FirstOrDefault(f => f.Mention != null && f.Text.ToLower() == mention);
+                if (fragment == null)
+                {
+                    _logger.Warning("Cannot find the channel to join chat with.");
+                    return;
+                }
+
+                await _client.CreateEventSubscription("channel.chat.message", "1", _twitch.SessionId, _user.TwitchUserId.ToString(), fragment.Mention!.UserId);
+                _logger.Information($"Joined chat room [channel: {fragment.Mention.UserLogin}][channel id: {fragment.Mention.UserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
+            }
+        }
+
+        private sealed class LeaveRoomCommand : IChatPartialCommand
+        {
+            private readonly TwitchWebsocketClient _twitch;
+            private readonly TwitchApiClient _client;
+            private readonly User _user;
+            private ILogger _logger;
+
+            public bool AcceptCustomPermission { get => true; }
+
+            public LeaveRoomCommand(
+                [FromKeyedServices("twitch")] SocketClient<TwitchWebsocketMessage> twitch,
+                TwitchApiClient client,
+                User user,
+                ILogger logger
+            )
+            {
+                _twitch = (twitch as TwitchWebsocketClient)!;
+                _client = client;
+                _user = user;
+                _logger = logger;
+            }
+
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            {
+                var mention = values["mention"].ToLower();
+                var fragment = message.Message.Fragments.FirstOrDefault(f => f.Mention != null && f.Text.ToLower() == mention);
+                if (fragment?.Mention == null)
+                {
+                    _logger.Warning("Cannot find the channel to leave chat from.");
+                    return;
+                }
+
+                var subscriptionId = _twitch.GetSubscriptionId(_user.TwitchUserId.ToString(), "channel.chat.message");
+                if (subscriptionId == null)
+                {
+                    _logger.Warning("Cannot find the subscription for that channel.");
+                    return;
+                }
+
+                try
+                {
+                    await _client.DeleteEventSubscription(subscriptionId);
+                    _twitch.RemoveSubscription(fragment.Mention.UserId, "channel.chat.message");
+                    _logger.Information($"Joined chat room [channel: {fragment.Mention.UserLogin}][channel id: {fragment.Mention.UserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Failed to delete the subscription from Twitch.");
+                }
             }
         }
     }

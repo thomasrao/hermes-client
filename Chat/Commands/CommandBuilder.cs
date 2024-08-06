@@ -45,17 +45,18 @@ namespace TwitchChatTTS.Chat.Commands
             {
                 if (_current == _root)
                     throw new Exception("Cannot add permissions without a command name.");
-                
+
                 _current.AddPermission(path);
                 return this;
             }
 
-            public ICommandBuilder AddAlias(string alias, string child) {
+            public ICommandBuilder AddAlias(string alias, string child)
+            {
                 if (_current == _root)
                     throw new Exception("Cannot add aliases without a command name.");
                 if (_current.Children == null || !_current.Children.Any())
                     throw new Exception("Cannot add alias if this has no parameter.");
-                
+
                 _current.AddAlias(alias, child);
                 return this;
             }
@@ -327,7 +328,8 @@ namespace TwitchChatTTS.Chat.Commands
                     Permissions = Permissions.Union([path]).ToArray();
             }
 
-            public CommandNode AddAlias(string alias, string child) {
+            public CommandNode AddAlias(string alias, string child)
+            {
                 var target = _children.FirstOrDefault(c => c.Parameter.Name == child);
                 if (target == null)
                     throw new Exception($"Cannot find child parameter [parameter: {child}][alias: {alias}]");
@@ -339,6 +341,8 @@ namespace TwitchChatTTS.Chat.Commands
                 var clone = target.MemberwiseClone() as CommandNode;
                 var node = new CommandNode(new StaticParameter(alias, alias, target.Parameter.Optional));
                 node._children = target._children;
+                node.Permissions = target.Permissions;
+                node.Command = target.Command;
                 _children.Add(node);
                 return this;
             }

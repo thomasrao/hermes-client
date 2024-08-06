@@ -18,14 +18,16 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _logger = logger;
         }
 
-        public Task Execute(TwitchWebsocketClient sender, object? data)
+        public Task Execute(TwitchWebsocketClient sender, object data)
         {
             if (data is not ChannelChatClearUserMessage message)
                 return Task.CompletedTask;
-            
+
+            long broadcasterId = long.Parse(message.BroadcasterUserId);
             long chatterId = long.Parse(message.TargetUserId);
-            _player.RemoveAll(chatterId);
-            if (_player.Playing?.ChatterId == chatterId) {
+            _player.RemoveAll(broadcasterId, chatterId);
+            if (_player.Playing != null && _player.Playing.RoomId == broadcasterId && _player.Playing.ChatterId == chatterId)
+            {
                 _playback.RemoveMixerInput(_player.Playing.Audio!);
                 _player.Playing = null;
             }

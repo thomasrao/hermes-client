@@ -101,13 +101,14 @@ public class TTSPlayer
         }
     }
 
-    public void RemoveAll(long chatterId)
+    public void RemoveAll(long broadcasterId, long chatterId)
     {
         try
         {
             _mutex2.WaitOne();
-            if (_buffer.UnorderedItems.Any(i => i.Element.ChatterId == chatterId)) {
-                var list = _buffer.UnorderedItems.Where(i => i.Element.ChatterId != chatterId).ToArray();
+            if (_buffer.UnorderedItems.Any(i => i.Element.RoomId == broadcasterId && i.Element.ChatterId == chatterId))
+            {
+                var list = _buffer.UnorderedItems.Where(i => i.Element.RoomId == broadcasterId && i.Element.ChatterId != chatterId).ToArray();
                 _buffer.Clear();
                 foreach (var item in list)
                     _buffer.Enqueue(item.Element, item.Element.Priority);
@@ -121,8 +122,9 @@ public class TTSPlayer
         try
         {
             _mutex.WaitOne();
-            if (_messages.UnorderedItems.Any(i => i.Element.ChatterId == chatterId)) {
-                var list = _messages.UnorderedItems.Where(i => i.Element.ChatterId != chatterId).ToArray();
+            if (_messages.UnorderedItems.Any(i => i.Element.RoomId == broadcasterId && i.Element.ChatterId == chatterId))
+            {
+                var list = _messages.UnorderedItems.Where(i => i.Element.RoomId == broadcasterId && i.Element.ChatterId != chatterId).ToArray();
                 _messages.Clear();
                 foreach (var item in list)
                     _messages.Enqueue(item.Element, item.Element.Priority);
@@ -139,7 +141,8 @@ public class TTSPlayer
         try
         {
             _mutex2.WaitOne();
-            if (_buffer.UnorderedItems.Any(i => i.Element.MessageId == messageId)) {
+            if (_buffer.UnorderedItems.Any(i => i.Element.MessageId == messageId))
+            {
                 var list = _buffer.UnorderedItems.Where(i => i.Element.MessageId != messageId).ToArray();
                 _buffer.Clear();
                 foreach (var item in list)
@@ -155,7 +158,8 @@ public class TTSPlayer
         try
         {
             _mutex.WaitOne();
-            if (_messages.UnorderedItems.Any(i => i.Element.MessageId == messageId)) {
+            if (_messages.UnorderedItems.Any(i => i.Element.MessageId == messageId))
+            {
                 var list = _messages.UnorderedItems.Where(i => i.Element.MessageId != messageId).ToArray();
                 _messages.Clear();
                 foreach (var item in list)
@@ -182,6 +186,7 @@ public class TTSPlayer
 public class TTSMessage
 {
     public string? Voice { get; set; }
+    public long RoomId { get; set; }
     public long ChatterId { get; set; }
     public string MessageId { get; set; }
     public string? Message { get; set; }

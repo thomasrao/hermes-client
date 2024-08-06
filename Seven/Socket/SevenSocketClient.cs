@@ -120,7 +120,7 @@ namespace TwitchChatTTS.Seven.Socket
                     _logger.Warning($"Received end of stream message for 7tv websocket [reason: {_errorCodes[code]}][code: {code}]");
                 else
                     _logger.Warning($"Received end of stream message for 7tv websocket [code: {code}]");
-                
+
                 if (code < 0 || code >= _reconnectDelay.Length)
                     await Task.Delay(TimeSpan.FromSeconds(30));
                 else if (_reconnectDelay[code] < 0)
@@ -131,7 +131,8 @@ namespace TwitchChatTTS.Seven.Socket
                 else if (_reconnectDelay[code] > 0)
                     await Task.Delay(_reconnectDelay[code]);
             }
-            else {
+            else
+            {
                 _logger.Warning("Unknown 7tv disconnection.");
                 await Task.Delay(TimeSpan.FromSeconds(30));
             }

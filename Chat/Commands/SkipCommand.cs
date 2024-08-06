@@ -1,5 +1,6 @@
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
+using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
@@ -51,7 +52,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 if (_player.Playing == null)
                     return;
@@ -78,7 +79,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 _player.RemoveAll();
 

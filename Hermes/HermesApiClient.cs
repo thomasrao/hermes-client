@@ -10,7 +10,7 @@ public class HermesApiClient
     private readonly TwitchBotAuth _token;
     private readonly WebClientWrap _web;
     private readonly ILogger _logger;
-    
+
     public const string BASE_URL = "tomtospeech.com";
 
     public HermesApiClient(TwitchBotAuth token, Configuration configuration, ILogger logger)
@@ -31,7 +31,7 @@ public class HermesApiClient
     }
 
 
-    public async Task<bool> AuthorizeTwitch()
+    public async Task<TwitchBotAuth?> AuthorizeTwitch()
     {
         try
         {
@@ -51,10 +51,9 @@ public class HermesApiClient
             else if (authorize != null)
             {
                 _logger.Error("Twitch API Authorization failed: " + authorize.AccessToken + " | " + authorize.RefreshToken + " | " + authorize.UserId + " | " + authorize.BroadcasterId);
-                return false;
+                return null;
             }
-            _logger.Debug($"Authorized Twitch API.");
-            return true;
+            return _token;
         }
         catch (JsonException)
         {
@@ -64,7 +63,7 @@ public class HermesApiClient
         {
             _logger.Error(e, "Failed to authorize to Twitch API.");
         }
-        return false;
+        return null;
     }
 
     public async Task<TTSVersion?> GetLatestTTSVersion()
@@ -74,7 +73,10 @@ public class HermesApiClient
 
     public async Task<Account> FetchHermesAccountDetails()
     {
-        var account = await _web.GetJson<Account>($"https://{BASE_URL}/api/account");
+        var account = await _web.GetJson<Account>($"https://{BASE_URL}/api/account", new JsonSerializerOptions()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
         if (account == null || account.Id == null || account.Username == null)
             throw new NullReferenceException("Invalid value found while fetching for hermes account data.");
         return account;

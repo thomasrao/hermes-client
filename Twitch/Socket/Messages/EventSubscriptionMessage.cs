@@ -11,7 +11,8 @@ namespace TwitchChatTTS.Twitch.Socket.Messages
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? Cost { get; set; }
 
-        public EventSubscriptionMessage() {
+        public EventSubscriptionMessage()
+        {
             Type = string.Empty;
             Version = string.Empty;
             Condition = new Dictionary<string, string>();
@@ -45,7 +46,8 @@ namespace TwitchChatTTS.Twitch.Socket.Messages
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public string? SessionId { get; }
 
-            public EventSubTransport() {
+            public EventSubTransport()
+            {
                 Method = string.Empty;
             }
 

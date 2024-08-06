@@ -13,6 +13,6 @@ namespace TwitchChatTTS.Chat.Commands
     public interface IChatPartialCommand
     {
         bool AcceptCustomPermission { get; }
-        Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client);
+        Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes);
     }
 }

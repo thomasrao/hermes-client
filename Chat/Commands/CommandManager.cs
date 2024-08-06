@@ -10,37 +10,30 @@ using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
 namespace TwitchChatTTS.Chat.Commands
 {
-    public class CommandManager
+    public class CommandManager : ICommandManager
     {
         private readonly User _user;
-        private readonly ICommandSelector _commandSelector;
+        private ICommandSelector _commandSelector;
         private readonly HermesSocketClient _hermes;
+        //private readonly TwitchWebsocketClient _twitch;
         private readonly IGroupPermissionManager _permissionManager;
         private readonly ILogger _logger;
         private string CommandStartSign { get; } = "!";
 
 
         public CommandManager(
-            IEnumerable<IChatCommand> commands,
-            ICommandBuilder commandBuilder,
             User user,
-            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> socketClient,
+            [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
+            //[FromKeyedServices("twitch")] SocketClient<TwitchWebsocketMessage> twitch,
             IGroupPermissionManager permissionManager,
             ILogger logger
         )
         {
             _user = user;
-            _hermes = (socketClient as HermesSocketClient)!;
+            _hermes = (hermes as HermesSocketClient)!;
+            //_twitch = (twitch as TwitchWebsocketClient)!;
             _permissionManager = permissionManager;
             _logger = logger;
-
-            foreach (var command in commands)
-            {
-                _logger.Debug($"Creating command tree for '{command.Name}'.");
-                command.Build(commandBuilder);
-            }
-
-            _commandSelector = commandBuilder.Build();
         }
 
 
@@ -54,9 +47,13 @@ namespace TwitchChatTTS.Chat.Commands
             if (!arg.StartsWith(CommandStartSign))
                 return ChatCommandResult.Unknown;
 
+            if (message.BroadcasterUserId != _user.TwitchUserId.ToString())
+                return ChatCommandResult.OtherRoom;
+
             string[] parts = Regex.Matches(arg.Substring(CommandStartSign.Length), "(?<match>[^\"\\n\\s]+|\"[^\"\\n]*\")")
                 .Cast<Match>()
                 .Select(m => m.Groups["match"].Value)
+                .Where(m => !string.IsNullOrEmpty(m))
                 .Select(m => m.StartsWith('"') && m.EndsWith('"') ? m.Substring(1, m.Length - 2) : m)
                 .ToArray();
             string[] args = parts.ToArray();
@@ -65,7 +62,7 @@ namespace TwitchChatTTS.Chat.Commands
             CommandSelectorResult selectorResult = _commandSelector.GetBestMatch(args, message);
             if (selectorResult.Command == null)
             {
-                _logger.Warning($"Could not match '{arg}' to any command.");
+                _logger.Warning($"Could not match '{arg}' to any command [chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
                 return ChatCommandResult.Missing;
             }
 
@@ -111,10 +108,24 @@ namespace TwitchChatTTS.Chat.Commands
             return ChatCommandResult.Success;
         }
 
+        public void Update(ICommandFactory factory)
+        {
+            _commandSelector = factory.Build();
+        }
+
         private bool CanExecute(long chatterId, IEnumerable<string> groups, string path, string[]? additionalPaths)
         {
             _logger.Debug($"Checking for permission [chatter id: {chatterId}][group: {string.Join(", ", groups)}][path: {path}]{(additionalPaths != null ? "[paths: " + string.Join('|', additionalPaths) + "]" : string.Empty)}");
-            return _permissionManager.CheckIfAllowed(groups, path) != false && (additionalPaths == null || additionalPaths.All(p => _permissionManager.CheckIfAllowed(groups, p) != false));
+            if (_permissionManager.CheckIfAllowed(groups, path) != false)
+            {
+                if (additionalPaths == null)
+                    return true;
+
+                // All direct allow must not be false and at least one of them must be true.
+                if (additionalPaths.All(p => _permissionManager.CheckIfDirectAllowed(groups, p) != false) && additionalPaths.Any(p => _permissionManager.CheckIfDirectAllowed(groups, p) == true))
+                    return true;
+            }
+            return false;
         }
     }
 }

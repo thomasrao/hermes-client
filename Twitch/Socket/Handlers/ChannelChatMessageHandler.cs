@@ -19,7 +19,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
 
         private readonly User _user;
         private readonly TTSPlayer _player;
-        private readonly CommandManager _commands;
+        private readonly ICommandManager _commands;
         private readonly IGroupPermissionManager _permissionManager;
         private readonly IChatterGroupManager _chatterGroupManager;
         private readonly IEmoteDatabase _emotes;
@@ -34,7 +34,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
         public ChannelChatMessageHandler(
             User user,
             TTSPlayer player,
-            CommandManager commands,
+            ICommandManager commands,
             IGroupPermissionManager permissionManager,
             IChatterGroupManager chatterGroupManager,
             IEmoteDatabase emotes,
@@ -59,15 +59,10 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _logger = logger;
         }
 
-        public async Task Execute(TwitchWebsocketClient sender, object? data)
+        public async Task Execute(TwitchWebsocketClient sender, object data)
         {
             if (sender == null)
                 return;
-            if (data == null)
-            {
-                _logger.Warning("Twitch websocket message data is null.");
-                return;
-            }
             if (data is not ChannelChatMessage message)
                 return;
 
@@ -231,6 +226,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
 
             var parts = _sfxRegex.Split(message);
             var chatterId = long.Parse(e.ChatterUserId);
+            var broadcasterId = long.Parse(e.BroadcasterUserId);
             var badgesString = string.Join(", ", e.Badges.Select(b => b.SetId + '|' + b.Id + '=' + b.Info));
 
             if (parts.Length == 1)
@@ -241,6 +237,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     Voice = voice,
                     Message = message,
                     Timestamp = DateTime.UtcNow,
+                    RoomId = broadcasterId,
                     ChatterId = chatterId,
                     MessageId = e.MessageId,
                     Badges = e.Badges,
@@ -271,6 +268,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                         Voice = voice,
                         Message = parts[i * 2],
                         Timestamp = DateTime.UtcNow,
+                        RoomId = broadcasterId,
                         ChatterId = chatterId,
                         MessageId = e.MessageId,
                         Badges = e.Badges,
@@ -284,6 +282,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     Voice = voice,
                     File = $"sfx/{sfxName}.mp3",
                     Timestamp = DateTime.UtcNow,
+                    RoomId = broadcasterId,
                     ChatterId = chatterId,
                     MessageId = e.MessageId,
                     Badges = e.Badges,
@@ -299,6 +298,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     Voice = voice,
                     Message = parts.Last(),
                     Timestamp = DateTime.UtcNow,
+                    RoomId = broadcasterId,
                     ChatterId = chatterId,
                     MessageId = e.MessageId,
                     Badges = e.Badges,

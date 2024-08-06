@@ -14,7 +14,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _logger = logger;
         }
 
-        public Task Execute(TwitchWebsocketClient sender, object? data)
+        public Task Execute(TwitchWebsocketClient sender, object data)
         {
             if (data is not ChannelBanMessage message)
                 return Task.CompletedTask;

@@ -8,11 +8,11 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
     {
         public string Name => "channel.channel_points_custom_reward_redemption.add";
 
-        private readonly RedemptionManager _redemptionManager;
+        private readonly IRedemptionManager _redemptionManager;
         private readonly ILogger _logger;
 
         public ChannelCustomRedemptionHandler(
-            RedemptionManager redemptionManager,
+            IRedemptionManager redemptionManager,
             ILogger logger
         )
         {
@@ -20,7 +20,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _logger = logger;
         }
 
-        public async Task Execute(TwitchWebsocketClient sender, object? data)
+        public async Task Execute(TwitchWebsocketClient sender, object data)
         {
             if (data is not ChannelCustomRedemptionMessage message)
                 return;
