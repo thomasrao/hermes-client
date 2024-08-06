@@ -71,10 +71,10 @@ namespace TwitchChatTTS.Chat.Commands
             long chatterId = long.Parse(message.ChatterUserId);
             if (chatterId != _user.OwnerId)
             {
-                bool executable = command.AcceptCustomPermission ? CanExecute(chatterId, groups, $"tts.command.{com}", selectorResult.Permissions) : false;
+                bool executable = command.AcceptCustomPermission ? CanExecute(chatterId, groups, $"tts.commands.{com}", selectorResult.Permissions) : false;
                 if (!executable)
                 {
-                    _logger.Debug($"Denied permission to use command [chatter id: {chatterId}][command: {com}]");
+                    _logger.Warning($"Denied permission to use command [chatter id: {chatterId}][args: {arg}][command type: {command.GetType().Name}]");
                     return ChatCommandResult.Permission;
                 }
             }
@@ -116,7 +116,7 @@ namespace TwitchChatTTS.Chat.Commands
         private bool CanExecute(long chatterId, IEnumerable<string> groups, string path, string[]? additionalPaths)
         {
             _logger.Debug($"Checking for permission [chatter id: {chatterId}][group: {string.Join(", ", groups)}][path: {path}]{(additionalPaths != null ? "[paths: " + string.Join('|', additionalPaths) + "]" : string.Empty)}");
-            if (_permissionManager.CheckIfAllowed(groups, path) != false)
+            if (_permissionManager.CheckIfAllowed(groups, path) == true)
             {
                 if (additionalPaths == null)
                     return true;
