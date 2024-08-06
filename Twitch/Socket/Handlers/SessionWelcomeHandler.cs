@@ -47,6 +47,8 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 "channel.chat.clear",
                 "channel.chat.clear_user_messages",
                 "channel.ad_break.begin",
+                "channel.subscribe",
+                "channel.subscription.gift",
                 "channel.subscription.message",
                 "channel.ban",
                 "channel.channel_points_custom_reward_redemption.add"

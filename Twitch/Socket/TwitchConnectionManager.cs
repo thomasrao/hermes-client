@@ -71,7 +71,7 @@ namespace TwitchChatTTS.Twitch.Socket
                 {
                     if (_identified == client)
                     {
-                        _logger.Error("Twitch client has been re-identified.");
+                        _logger.Warning("Twitch client has been re-identified.");
                         return;
                     }
                     if (_backup != client)
@@ -83,6 +83,7 @@ namespace TwitchChatTTS.Twitch.Socket
 
                     if (_identified != null)
                     {
+                        _logger.Debug("Second Twitch client has been identified; hopefully a reconnection.");
                         return;
                     }
 
@@ -101,10 +102,12 @@ namespace TwitchChatTTS.Twitch.Socket
                 {
                     if (_identified == client)
                     {
+                        _logger.Debug("Identified Twitch client has disconnected.");
                         _identified = null;
                     }
                     else if (_backup == client)
                     {
+                        _logger.Debug("Backup Twitch client has disconnected.");
                         _backup = null;
                     }
                     else

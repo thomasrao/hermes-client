@@ -33,7 +33,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 var actions = _redemptionManager.Get("adbreak");
                 if (!actions.Any())
                 {
-                    _logger.Debug($"No redemable actions for ad break was found");
+                    _logger.Debug($"No redeemable actions for ad break was found");
                     return;
                 }
                 _logger.Debug($"Found {actions.Count} actions for this Twitch ad break");
@@ -45,7 +45,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: ad break]");
+                        _logger.Error(ex, $"Failed to execute redeemable action [action: {action.Name}][action type: {action.Type}][redeem: ad break]");
                     }
             }
             catch (Exception ex)

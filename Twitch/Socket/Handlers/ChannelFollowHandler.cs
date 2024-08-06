@@ -28,7 +28,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 var actions = _redemptionManager.Get("follow");
                 if (!actions.Any())
                 {
-                    _logger.Debug($"No redemable actions for follow was found");
+                    _logger.Debug($"No redeemable actions for follow was found");
                     return;
                 }
                 _logger.Debug($"Found {actions.Count} actions for this Twitch follow");
@@ -40,7 +40,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: follow]");
+                        _logger.Error(ex, $"Failed to execute redeemable action [action: {action.Name}][action type: {action.Type}][redeem: follow]");
                     }
             }
             catch (Exception ex)

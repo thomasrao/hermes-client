@@ -40,10 +40,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
 
             var backup = _manager.GetBackupClient();
             var identified = _manager.GetWorkingClient();
-            if (identified != null && backup != identified)
-            {
-                await identified.DisconnectAsync(new SocketDisconnectionEventArgs("Closed", "Reconnection from another client."));
-            }
+            _logger.Debug($"Reconnection received [receiver: {sender.UID}][main: {identified.UID}][backup: {backup.UID}]");
 
             backup.URL = message.Session.ReconnectUrl;
             await backup.Connect();

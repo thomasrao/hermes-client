@@ -28,7 +28,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 var actions = _redemptionManager.Get("subscription");
                 if (!actions.Any())
                 {
-                    _logger.Debug($"No redemable actions for this subscription was found [message: {message.Message.Text}]");
+                    _logger.Debug($"No redeemable actions for this subscription was found [message: {message.Message.Text}]");
                     return;
                 }
                 _logger.Debug($"Found {actions.Count} actions for this Twitch subscription [message: {message.Message.Text}]");
@@ -40,7 +40,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: subscription][message: {message.Message.Text}]");
+                        _logger.Error(ex, $"Failed to execute redeemable action [action: {action.Name}][action type: {action.Type}][redeem: resubscription][message: {message.Message.Text}]");
                     }
             }
             catch (Exception ex)

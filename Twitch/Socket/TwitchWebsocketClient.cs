@@ -22,6 +22,7 @@ namespace TwitchChatTTS.Twitch.Socket
 
         public event EventHandler<EventArgs> OnIdentified;
 
+        public string UID { get; }
         public string URL;
         public bool Connected { get; private set; }
         public bool Identified { get; private set; }
@@ -50,6 +51,7 @@ namespace TwitchChatTTS.Twitch.Socket
             _messageTypes.Add("session_reconnect", typeof(SessionWelcomeMessage));
             _messageTypes.Add("notification", typeof(NotificationMessage));
 
+            UID = Guid.NewGuid().ToString("D");
             URL = "wss://eventsub.wss.twitch.tv/ws";
         }
 

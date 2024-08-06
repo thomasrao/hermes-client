@@ -6,7 +6,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
 {
     public class ChannelSubscriptionHandler : ITwitchSocketHandler
     {
-        public string Name => "channel.subscription";
+        public string Name => "channel.subscribe";
 
         private readonly IRedemptionManager _redemptionManager;
         private readonly ILogger _logger;
@@ -30,7 +30,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 var actions = _redemptionManager.Get("subscription");
                 if (!actions.Any())
                 {
-                    _logger.Debug($"No redemable actions for this subscription was found [subscriber: {message.UserLogin}][subscriber id: {message.UserId}]");
+                    _logger.Debug($"No redeemable actions for this subscription was found [subscriber: {message.UserLogin}][subscriber id: {message.UserId}]");
                     return;
                 }
                 _logger.Debug($"Found {actions.Count} actions for this Twitch subscription [subscriber: {message.UserLogin}][subscriber id: {message.UserId}]");
@@ -42,7 +42,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: subscription][subscriber: {message.UserLogin}][subscriber id: {message.UserId}]");
+                        _logger.Error(ex, $"Failed to execute redeemable action [action: {action.Name}][action type: {action.Type}][redeem: subscription][subscriber: {message.UserLogin}][subscriber id: {message.UserId}]");
                     }
             }
             catch (Exception ex)

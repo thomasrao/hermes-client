@@ -28,7 +28,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 var actions = _redemptionManager.Get("subscription.gift");
                 if (!actions.Any())
                 {
-                    _logger.Debug($"No redemable actions for this gifted subscription was found");
+                    _logger.Debug($"No redeemable actions for this gifted subscription was found");
                     return;
                 }
                 _logger.Debug($"Found {actions.Count} actions for this Twitch gifted subscription [gifted: {message.UserLogin}][gifted id: {message.UserId}][Anonymous: {message.IsAnonymous}][cumulative: {message.CumulativeTotal ?? -1}]");
@@ -40,7 +40,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: gifted subscription]");
+                        _logger.Error(ex, $"Failed to execute redeemable action [action: {action.Name}][action type: {action.Type}][redeem: gifted subscription]");
                     }
             }
             catch (Exception ex)

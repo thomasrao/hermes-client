@@ -38,8 +38,8 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _messageTypes.Add("channel.chat.message_delete", typeof(ChannelChatDeleteMessage));
             _messageTypes.Add("channel.channel_points_custom_reward_redemption.add", typeof(ChannelCustomRedemptionMessage));
             _messageTypes.Add("channel.follow", typeof(ChannelFollowMessage));
-            _messageTypes.Add("channel.resubscription", typeof(ChannelResubscriptionMessage));
-            _messageTypes.Add("channel.subscription.message", typeof(ChannelSubscriptionMessage));
+            _messageTypes.Add("channel.subscribe", typeof(ChannelSubscriptionMessage));
+            _messageTypes.Add("channel.subscription.message", typeof(ChannelResubscriptionMessage));
             _messageTypes.Add("channel.subscription.gift", typeof(ChannelSubscriptionGiftMessage));
         }
 

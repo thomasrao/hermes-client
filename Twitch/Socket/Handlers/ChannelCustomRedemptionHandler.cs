@@ -32,7 +32,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 var actions = _redemptionManager.Get(message.Reward.Id);
                 if (!actions.Any())
                 {
-                    _logger.Debug($"No redemable actions for this redeem was found [redeem: {message.Reward.Title}][redeem id: {message.Reward.Id}][transaction: {message.Id}]");
+                    _logger.Debug($"No redeemable actions for this redeem was found [redeem: {message.Reward.Title}][redeem id: {message.Reward.Id}][transaction: {message.Id}]");
                     return;
                 }
                 _logger.Debug($"Found {actions.Count} actions for this Twitch channel point redemption [redeem: {message.Reward.Title}][redeem id: {message.Reward.Id}][transaction: {message.Id}]");
@@ -44,7 +44,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, $"Failed to execute redeeemable action [action: {action.Name}][action type: {action.Type}][redeem: {message.Reward.Title}][redeem id: {message.Reward.Id}][transaction: {message.Id}]");
+                        _logger.Error(ex, $"Failed to execute redeemable action [action: {action.Name}][action type: {action.Type}][redeem: {message.Reward.Title}][redeem id: {message.Reward.Id}][transaction: {message.Id}]");
                     }
             }
             catch (Exception ex)
