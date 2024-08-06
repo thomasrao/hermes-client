@@ -8,8 +8,6 @@ namespace TwitchChatTTS.Chat.Commands
     public class VoiceCommand : IChatCommand
     {
         private readonly User _user;
-        // TODO: get permissions
-        // TODO: validated parameter for username by including '@' and regex for username
         private readonly ILogger _logger;
 
         public VoiceCommand(User user, ILogger logger)
@@ -26,7 +24,7 @@ namespace TwitchChatTTS.Chat.Commands
             {
                 b.CreateVoiceNameParameter("voiceName", true)
                     .CreateCommand(new TTSVoiceSelector(_user, _logger))
-                    .CreateUnvalidatedParameter("chatter", optional: true)
+                    .CreateMentionParameter("chatter", enabled: true, optional: true)
                     .AddPermission("tts.command.voice.admin")
                     .CreateCommand(new TTSVoiceSelectorAdmin(_user, _logger));
             });
@@ -45,7 +43,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 if (_user == null || _user.VoicesSelected == null)
                     return;
@@ -57,12 +55,12 @@ namespace TwitchChatTTS.Chat.Commands
 
                 if (_user.VoicesSelected.ContainsKey(chatterId))
                 {
-                    await client.UpdateTTSUser(chatterId, voice.Key);
+                    await hermes.UpdateTTSUser(chatterId, voice.Key);
                     _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {message.ChatterUserLogin}][reason: command]");
                 }
                 else
                 {
-                    await client.CreateTTSUser(chatterId, voice.Key);
+                    await hermes.CreateTTSUser(chatterId, voice.Key);
                     _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {message.ChatterUserLogin}][reason: command]");
                 }
             }
@@ -81,13 +79,12 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 if (_user == null || _user.VoicesSelected == null)
                     return;
 
-                var chatterLogin = values["chatter"].Substring(1);
-                var mention = message.Message.Fragments.FirstOrDefault(f => f.Mention != null && f.Mention.UserLogin == chatterLogin)?.Mention;
+                var mention = message.Message.Fragments.FirstOrDefault(f => f.Mention != null && f.Text == values["chatter"])?.Mention;
                 if (mention == null)
                 {
                     _logger.Warning("Failed to find the chatter to apply voice command to.");
@@ -101,12 +98,12 @@ namespace TwitchChatTTS.Chat.Commands
 
                 if (_user.VoicesSelected.ContainsKey(chatterId))
                 {
-                    await client.UpdateTTSUser(chatterId, voice.Key);
+                    await hermes.UpdateTTSUser(chatterId, voice.Key);
                     _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {mention.UserLogin}][reason: command]");
                 }
                 else
                 {
-                    await client.CreateTTSUser(chatterId, voice.Key);
+                    await hermes.CreateTTSUser(chatterId, voice.Key);
                     _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {mention.UserLogin}][reason: command]");
                 }
             }

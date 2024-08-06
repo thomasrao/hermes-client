@@ -23,12 +23,33 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
             return res;
         }
 
+        public bool? CheckIfDirectAllowed(string path)
+        {
+            var res = Get(path)?.DirectAllow;
+            _logger.Debug($"Permission Node GET {path} = {res?.ToString() ?? "null"} [direct]");
+            return res;
+        }
+
         public bool? CheckIfAllowed(IEnumerable<string> groups, string path)
         {
             bool overall = false;
             foreach (var group in groups)
             {
                 var result = CheckIfAllowed($"{group}.{path}");
+                if (result == false)
+                    return false;
+                if (result == true)
+                    overall = true;
+            }
+            return overall ? true : null;
+        }
+
+        public bool? CheckIfDirectAllowed(IEnumerable<string> groups, string path)
+        {
+            bool overall = false;
+            foreach (var group in groups)
+            {
+                var result = CheckIfDirectAllowed($"{group}.{path}");
                 if (result == false)
                     return false;
                 if (result == true)
@@ -104,6 +125,7 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
                 }
                 set => _allow = value;
             }
+            public bool? DirectAllow { get => _allow; }
 
             internal PermissionNode? Parent { get => _parent; }
             public IList<PermissionNode>? Children { get => _children == null ? null : new ReadOnlyCollection<PermissionNode>(_children); }

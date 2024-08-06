@@ -5,6 +5,7 @@ using Serilog;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket;
 using TwitchChatTTS.OBS.Socket.Data;
+using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
@@ -71,7 +72,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 string sceneName = values["sceneName"];
                 string sourceName = values["sourceName"];
@@ -97,7 +98,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 string sceneName = values["sceneName"];
                 string sourceName = values["sourceName"];
@@ -133,7 +134,7 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 string sceneName = values["sceneName"];
                 string sourceName = values["sourceName"];

@@ -28,6 +28,7 @@ using static TwitchChatTTS.Chat.Commands.TTSCommands;
 using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using TwitchChatTTS.Twitch.Socket.Handlers;
+using CommonSocketLibrary.Backoff;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -43,13 +44,10 @@ var deserializer = new DeserializerBuilder()
 
 var configContent = File.ReadAllText("tts.config.yml");
 var configuration = deserializer.Deserialize<Configuration>(configContent);
-s.AddSingleton<Configuration>(configuration);
+s.AddSingleton(configuration);
 
 var logger = new LoggerConfiguration()
     .MinimumLevel.Verbose()
-    //.MinimumLevel.Override("TwitchLib.Communication.Clients.WebSocketClient", LogEventLevel.Warning)
-    //.MinimumLevel.Override("TwitchLib.PubSub.TwitchPubSub", LogEventLevel.Warning)
-    .MinimumLevel.Override("TwitchLib", LogEventLevel.Warning)
     .MinimumLevel.Override("mariuszgromada", LogEventLevel.Error)
     .Enrich.FromLogContext()
     .WriteTo.File("logs/log-.log", restrictedToMinimumLevel: LogEventLevel.Debug, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 3)
@@ -57,11 +55,11 @@ var logger = new LoggerConfiguration()
     .CreateLogger();
 
 s.AddSerilog(logger);
-s.AddSingleton<User>(new User());
+s.AddSingleton<User>();
 s.AddSingleton<AudioPlaybackEngine>();
 s.AddSingleton<ICallbackManager<HermesRequestData>, CallbackManager<HermesRequestData>>();
 
-s.AddSingleton<JsonSerializerOptions>(new JsonSerializerOptions()
+s.AddSingleton(new JsonSerializerOptions()
 {
     PropertyNameCaseInsensitive = false,
     PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
@@ -77,10 +75,11 @@ s.AddSingleton<IChatCommand, VersionCommand>();
 s.AddSingleton<ICommandBuilder, CommandBuilder>();
 s.AddSingleton<IChatterGroupManager, ChatterGroupManager>();
 s.AddSingleton<IGroupPermissionManager, GroupPermissionManager>();
-s.AddSingleton<CommandManager>();
+s.AddSingleton<ICommandFactory, CommandFactory>();
+s.AddSingleton<ICommandManager, CommandManager>();
 
 s.AddSingleton<TTSPlayer>();
-s.AddSingleton<RedemptionManager>();
+s.AddSingleton<IRedemptionManager, RedemptionManager>();
 s.AddSingleton<HermesApiClient>();
 s.AddSingleton<TwitchBotAuth>();
 s.AddSingleton<TwitchApiClient>();
@@ -109,19 +108,33 @@ s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, SevenMessageTypeManag
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");
 
 // twitch websocket
-s.AddKeyedSingleton<SocketClient<TwitchWebsocketMessage>, TwitchWebsocketClient>("twitch");
+s.AddKeyedSingleton<IBackoff>("twitch", new ExponentialBackoff(1000, 120 * 1000));
+s.AddSingleton<ITwitchConnectionManager, TwitchConnectionManager>();
+s.AddKeyedTransient<SocketClient<TwitchWebsocketMessage>, TwitchWebsocketClient>("twitch", (sp, _) =>
+{
+    var factory = sp.GetRequiredService<ITwitchConnectionManager>();
+    var client = factory.GetWorkingClient();
+    client.Connect().Wait();
+    return client;
+});
+s.AddKeyedTransient<SocketClient<TwitchWebsocketMessage>, TwitchWebsocketClient>("twitch-create");
 
+s.AddKeyedSingleton<ITwitchSocketHandler, SessionKeepAliveHandler>("twitch");
 s.AddKeyedSingleton<ITwitchSocketHandler, SessionWelcomeHandler>("twitch");
 s.AddKeyedSingleton<ITwitchSocketHandler, SessionReconnectHandler>("twitch");
 s.AddKeyedSingleton<ITwitchSocketHandler, NotificationHandler>("twitch");
 
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelAdBreakHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelBanHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatMessageHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatClearUserHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatClearHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatDeleteMessageHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelCustomRedemptionHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelFollowHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelResubscriptionHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelSubscriptionHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelSubscriptionGiftHandler>("twitch-notifications");
 
 // hermes websocket
 s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes");

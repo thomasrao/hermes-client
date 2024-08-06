@@ -11,6 +11,6 @@ namespace TwitchChatTTS.Twitch.Socket.Messages
         public string Id { get; set; }
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
-        public object Event { get; set; }
+        public object? Event { get; set; }
     }
 }

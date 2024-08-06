@@ -23,30 +23,30 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _handlers = handlers.ToDictionary(h => h.Name, h => h);
             _logger = logger;
 
-            _options = new JsonSerializerOptions() {
+            _options = new JsonSerializerOptions()
+            {
                 PropertyNameCaseInsensitive = false,
                 PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
             };
 
             _messageTypes = new Dictionary<string, Type>();
+            _messageTypes.Add("channel.adbreak.begin", typeof(ChannelAdBreakMessage));
             _messageTypes.Add("channel.ban", typeof(ChannelBanMessage));
             _messageTypes.Add("channel.chat.message", typeof(ChannelChatMessage));
             _messageTypes.Add("channel.chat.clear_user_messages", typeof(ChannelChatClearUserMessage));
             _messageTypes.Add("channel.chat.clear", typeof(ChannelChatClearMessage));
             _messageTypes.Add("channel.chat.message_delete", typeof(ChannelChatDeleteMessage));
             _messageTypes.Add("channel.channel_points_custom_reward_redemption.add", typeof(ChannelCustomRedemptionMessage));
+            _messageTypes.Add("channel.follow", typeof(ChannelFollowMessage));
+            _messageTypes.Add("channel.resubscription", typeof(ChannelResubscriptionMessage));
             _messageTypes.Add("channel.subscription.message", typeof(ChannelSubscriptionMessage));
+            _messageTypes.Add("channel.subscription.gift", typeof(ChannelSubscriptionGiftMessage));
         }
 
-        public async Task Execute(TwitchWebsocketClient sender, object? data)
+        public async Task Execute(TwitchWebsocketClient sender, object data)
         {
             if (sender == null)
                 return;
-            if (data == null)
-            {
-                _logger.Warning("Twitch websocket message data is null.");
-                return;
-            }
             if (data is not NotificationMessage message)
                 return;
 

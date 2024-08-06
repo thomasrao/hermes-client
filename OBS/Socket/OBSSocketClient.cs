@@ -23,7 +23,7 @@ namespace TwitchChatTTS.OBS.Socket
         public bool Identified { get; set; }
         public bool Streaming { get; set; }
 
-        
+
         public OBSSocketClient(
             Configuration configuration,
             [FromKeyedServices("obs")] IEnumerable<IWebSocketHandler> handlers,
@@ -104,7 +104,8 @@ namespace TwitchChatTTS.OBS.Socket
             }
         }
 
-        public async Task ExecuteRequest(RequestResponseMessage message) {
+        public async Task ExecuteRequest(RequestResponseMessage message)
+        {
             if (!_handlers.TryGetValue(7, out var handler) || handler == null)
             {
                 _logger.Error("Failed to find the request response handler for OBS.");

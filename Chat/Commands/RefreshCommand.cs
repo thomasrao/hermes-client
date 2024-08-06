@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket;
+using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
@@ -44,9 +45,9 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
-                await client.FetchEnabledTTSVoices();
+                await hermes.FetchEnabledTTSVoices();
             }
         }
 
@@ -54,9 +55,9 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
-                await client.FetchTTSWordFilters();
+                await hermes.FetchTTSWordFilters();
             }
         }
 
@@ -64,9 +65,9 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
-                await client.FetchTTSChatterVoices();
+                await hermes.FetchTTSChatterVoices();
             }
         }
 
@@ -74,9 +75,9 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
-                await client.FetchDefaultTTSVoice();
+                await hermes.FetchDefaultTTSVoice();
             }
         }
 
@@ -84,9 +85,9 @@ namespace TwitchChatTTS.Chat.Commands
         {
             public bool AcceptCustomPermission { get => true; }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
-                await client.FetchRedemptions();
+                await hermes.FetchRedemptions();
             }
         }
 
@@ -97,12 +98,13 @@ namespace TwitchChatTTS.Chat.Commands
 
             public bool AcceptCustomPermission { get => true; }
 
-            public RefreshObs(OBSSocketClient obsManager, ILogger logger) {
+            public RefreshObs(OBSSocketClient obsManager, ILogger logger)
+            {
                 _obsManager = obsManager;
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 _obsManager.ClearCache();
                 _logger.Information("Cleared the cache used for OBS.");
@@ -114,9 +116,9 @@ namespace TwitchChatTTS.Chat.Commands
 
             public bool AcceptCustomPermission { get => true; }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
-                await client.FetchPermissions();
+                await hermes.FetchPermissions();
             }
         }
     }

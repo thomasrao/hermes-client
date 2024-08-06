@@ -18,7 +18,6 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
     public class RequestAckHandler : IWebSocketHandler
     {
         private User _user;
-        //private readonly RedemptionManager _redemptionManager;
         private readonly ICallbackManager<HermesRequestData> _callbackManager;
         private readonly IServiceProvider _serviceProvider;
         private readonly JsonSerializerOptions _options;
@@ -30,16 +29,16 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
 
         public RequestAckHandler(
-            User user,
             ICallbackManager<HermesRequestData> callbackManager,
             IServiceProvider serviceProvider,
+            User user,
             JsonSerializerOptions options,
             ILogger logger
         )
         {
-            _user = user;
             _callbackManager = callbackManager;
             _serviceProvider = serviceProvider;
+            _user = user;
             _options = options;
             _logger = logger;
         }
@@ -263,15 +262,15 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                         re.Match(string.Empty);
                         filter.Regex = re;
                     }
-                    catch (Exception e) { }
+                    catch (Exception) { }
                 }
                 _user.RegexFilters = filters;
                 _logger.Information($"TTS word filters [count: {_user.RegexFilters.Count()}] have been refreshed.");
             }
             else if (message.Request.Type == "update_tts_voice_state")
             {
-                string voiceId = message.Request.Data["voice"].ToString();
-                bool state = message.Request.Data["state"].ToString().ToLower() == "true";
+                string voiceId = message.Request.Data?["voice"].ToString()!;
+                bool state = message.Request.Data?["state"].ToString()!.ToLower() == "true";
 
                 if (!_user.VoicesAvailable.TryGetValue(voiceId, out string? voiceName) || voiceName == null)
                 {
@@ -305,14 +304,14 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                     _logger.Warning("Failed to read the redeemable actions for redemptions.");
                     return;
                 }
-                if (hermesRequestData?.Data == null || !(hermesRequestData.Data["redemptions"] is IEnumerable<Redemption> redemptions))
+                if (hermesRequestData?.Data == null || hermesRequestData.Data["redemptions"] is not IEnumerable<Redemption> redemptions)
                 {
                     _logger.Warning("Failed to read the redemptions while updating redemption actions.");
                     return;
                 }
 
                 _logger.Information($"Redeemable actions [count: {actions.Count()}] loaded.");
-                var redemptionManager = _serviceProvider.GetRequiredService<RedemptionManager>();
+                var redemptionManager = _serviceProvider.GetRequiredService<IRedemptionManager>();
                 redemptionManager.Initialize(redemptions, actions.ToDictionary(a => a.Name, a => a));
             }
             else if (message.Request.Type == "get_default_tts_voice")

@@ -8,40 +8,45 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
     {
         public string Name => "session_reconnect";
 
-        private readonly TwitchApiClient _api;
+        private readonly ITwitchConnectionManager _manager;
         private readonly ILogger _logger;
 
-        public SessionReconnectHandler(TwitchApiClient api, ILogger logger)
+        public SessionReconnectHandler(ITwitchConnectionManager manager, ILogger logger)
         {
-            _api = api;
+            _manager = manager;
             _logger = logger;
         }
 
-        public async Task Execute(TwitchWebsocketClient sender, object? data)
+        public async Task Execute(TwitchWebsocketClient sender, object data)
         {
             if (sender == null)
                 return;
-            if (data == null)
-            {
-                _logger.Warning("Twitch websocket message data is null.");
-                return;
-            }
             if (data is not SessionWelcomeMessage message)
-                return;
-            if (_api == null)
                 return;
 
             if (string.IsNullOrEmpty(message.Session.Id))
             {
-                _logger.Warning($"No session info provided by Twitch [status: {message.Session.Status}]");
+                _logger.Warning($"No session id provided by Twitch [status: {message.Session.Status}]");
                 return;
             }
 
-            // TODO: Be able to handle multiple websocket connections.
-            sender.URL = message.Session.ReconnectUrl;
-            await Task.Delay(TimeSpan.FromSeconds(29));
-            await sender.DisconnectAsync(new SocketDisconnectionEventArgs("Close", "Twitch asking to reconnect."));
-            await sender.Connect();
+            if (message.Session.ReconnectUrl == null)
+            {
+                _logger.Warning($"No reconnection info provided by Twitch [status: {message.Session.Status}]");
+                return;
+            }
+
+            sender.ReceivedReconnecting = true;
+
+            var backup = _manager.GetBackupClient();
+            var identified = _manager.GetWorkingClient();
+            if (identified != null && backup != identified)
+            {
+                await identified.DisconnectAsync(new SocketDisconnectionEventArgs("Closed", "Reconnection from another client."));
+            }
+
+            backup.URL = message.Session.ReconnectUrl;
+            await backup.Connect();
         }
     }
 }

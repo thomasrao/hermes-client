@@ -1,6 +1,7 @@
 using HermesSocketLibrary.Socket.Data;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
+using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
@@ -37,11 +38,11 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
             }
 
-            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient client)
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 _logger.Information($"TTS Version: {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}");
 
-                await client.SendLoggingMessage(HermesLoggingLevel.Info, $"{_user.TwitchUsername} [twitch id: {_user.TwitchUserId}] using version {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}.");
+                await hermes.SendLoggingMessage(HermesLoggingLevel.Info, $"{_user.TwitchUsername} [twitch id: {_user.TwitchUserId}] using version {TTS.MAJOR_VERSION}.{TTS.MINOR_VERSION}.");
             }
         }
     }
