@@ -69,7 +69,7 @@ namespace TwitchChatTTS.Chat.Commands
             // Check if command can be executed by this chatter.
             var command = selectorResult.Command;
             long chatterId = long.Parse(message.ChatterUserId);
-            if (chatterId != _user.OwnerId)
+            //if (chatterId != _user.OwnerId)
             {
                 bool executable = command.AcceptCustomPermission ? CanExecute(chatterId, groups, $"tts.commands.{com}", selectorResult.Permissions) : false;
                 if (!executable)
