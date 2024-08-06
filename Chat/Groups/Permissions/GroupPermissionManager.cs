@@ -36,16 +36,16 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
 
         public bool? CheckIfAllowed(IEnumerable<string> groups, string path)
         {
-            bool overall = true;
+            bool overall = false;
             foreach (var group in groups)
             {
                 var result = CheckIfAllowed($"{group}.{path}");
-                if (result == true)
-                    return true;
                 if (result == false)
-                    overall = false;
+                    return false;
+                if (result == true)
+                    overall = true;
             }
-            return overall ? null : false;
+            return overall ? true : null;
         }
 
         public bool? CheckIfDirectAllowed(IEnumerable<string> groups, string path)

@@ -214,8 +214,27 @@ namespace TwitchChatTTS.Chat.Commands
                     return;
                 }
 
-                await _client.CreateEventSubscription("channel.chat.message", "1", _twitch.SessionId, _user.TwitchUserId.ToString(), fragment.Mention!.UserId);
-                _logger.Information($"Joined chat room [channel: {fragment.Mention.UserLogin}][channel id: {fragment.Mention.UserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
+                string targetUserId = fragment.Mention!.UserId!;
+                if (targetUserId == _user.TwitchUserId.ToString())
+                {
+                    _logger.Warning("Cannot join yourself.");
+                    return;
+                }
+
+                string[] subscriptions = ["channel.chat.message", "channel.chat.message_delete", "channel.chat.clear_user_messages"];
+                foreach (var subscription in subscriptions)
+                {
+                    _logger.Debug($"Attempting to subscribe to Twitch events [subscription: {subscription}]");
+                    var data = await _client.CreateEventSubscription(subscription, "1", _twitch.SessionId, _user.TwitchUserId.ToString(), targetUserId);
+                    var info = data?.Data?.FirstOrDefault();
+                    if (info == null)
+                    {
+                        _logger.Warning("Could not find the subscription id.");
+                        continue;
+                    }
+                    _twitch.AddSubscription(targetUserId, subscription, info.Id);
+                }
+                _logger.Information($"Joined chat room [channel: {fragment.Mention.UserLogin}][channel id: {targetUserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
             }
         }
 
@@ -251,22 +270,33 @@ namespace TwitchChatTTS.Chat.Commands
                     return;
                 }
 
-                var subscriptionId = _twitch.GetSubscriptionId(_user.TwitchUserId.ToString(), "channel.chat.message");
-                if (subscriptionId == null)
+                string targetUserId = fragment.Mention!.UserId!;
+                if (targetUserId == _user.TwitchUserId.ToString())
                 {
-                    _logger.Warning("Cannot find the subscription for that channel.");
+                    _logger.Warning("Cannot join yourself.");
                     return;
                 }
 
-                try
+                string[] subscriptions = ["channel.chat.message", "channel.chat.message_delete", "channel.chat.clear_user_messages"];
+                foreach (var subscription in subscriptions)
                 {
-                    await _client.DeleteEventSubscription(subscriptionId);
-                    _twitch.RemoveSubscription(fragment.Mention.UserId, "channel.chat.message");
-                    _logger.Information($"Joined chat room [channel: {fragment.Mention.UserLogin}][channel id: {fragment.Mention.UserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Failed to delete the subscription from Twitch.");
+                    var subscriptionId = _twitch.GetSubscriptionId(targetUserId, subscription);
+                    if (subscriptionId == null)
+                    {
+                        _logger.Warning($"Cannot find the subscription for that channel  [subscription: {subscription}]");
+                        continue;
+                    }
+
+                    try
+                    {
+                        await _client.DeleteEventSubscription(subscriptionId);
+                        _twitch.RemoveSubscription(targetUserId, subscription);
+                        _logger.Information($"Left chat room [channel: {fragment.Mention.UserLogin}][channel id: {targetUserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"Failed to delete the subscription from Twitch [subscription: {subscription}][subscription id: {subscriptionId}]");
+                    }
                 }
             }
         }
