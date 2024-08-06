@@ -25,7 +25,7 @@ namespace TwitchChatTTS.Chat.Commands
                 b.CreateVoiceNameParameter("voiceName", true)
                     .CreateCommand(new TTSVoiceSelector(_user, _logger))
                     .CreateMentionParameter("chatter", enabled: true, optional: true)
-                    .AddPermission("tts.command.voice.admin")
+                    .AddPermission("tts.commands.voice.admin")
                     .CreateCommand(new TTSVoiceSelectorAdmin(_user, _logger));
             });
         }
@@ -56,12 +56,12 @@ namespace TwitchChatTTS.Chat.Commands
                 if (_user.VoicesSelected.ContainsKey(chatterId))
                 {
                     await hermes.UpdateTTSUser(chatterId, voice.Key);
-                    _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {message.ChatterUserLogin}][reason: command]");
+                    _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {message.ChatterUserLogin}][reason: command]");
                 }
                 else
                 {
                     await hermes.CreateTTSUser(chatterId, voice.Key);
-                    _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {message.ChatterUserLogin}][reason: command]");
+                    _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {message.ChatterUserLogin}][reason: command]");
                 }
             }
         }
@@ -99,12 +99,12 @@ namespace TwitchChatTTS.Chat.Commands
                 if (_user.VoicesSelected.ContainsKey(chatterId))
                 {
                     await hermes.UpdateTTSUser(chatterId, voice.Key);
-                    _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {mention.UserLogin}][reason: command]");
+                    _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {mention.UserLogin}][reason: command]");
                 }
                 else
                 {
                     await hermes.CreateTTSUser(chatterId, voice.Key);
-                    _logger.Debug($"Sent request to update chat TTS voice [voice: {voice.Value}][username: {mention.UserLogin}][reason: command]");
+                    _logger.Debug($"Sent request to create chat TTS voice [voice: {voice.Value}][username: {mention.UserLogin}][reason: command]");
                 }
             }
         }

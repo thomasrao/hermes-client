@@ -18,30 +18,34 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
 
         public bool? CheckIfAllowed(string path)
         {
-            var res = Get(path)?.Allow;
+            var res = Get(path)!.Allow;
             _logger.Debug($"Permission Node GET {path} = {res?.ToString() ?? "null"}");
             return res;
         }
 
         public bool? CheckIfDirectAllowed(string path)
         {
-            var res = Get(path)?.DirectAllow;
+            var node = Get(path, nullIfMissing: true);
+            if (node == null)
+                return null;
+            
+            var res = node.DirectAllow;
             _logger.Debug($"Permission Node GET {path} = {res?.ToString() ?? "null"} [direct]");
             return res;
         }
 
         public bool? CheckIfAllowed(IEnumerable<string> groups, string path)
         {
-            bool overall = false;
+            bool overall = true;
             foreach (var group in groups)
             {
                 var result = CheckIfAllowed($"{group}.{path}");
-                if (result == false)
-                    return false;
                 if (result == true)
-                    overall = true;
+                    return true;
+                if (result == false)
+                    overall = false;
             }
-            return overall ? true : null;
+            return overall ? null : false;
         }
 
         public bool? CheckIfDirectAllowed(IEnumerable<string> groups, string path)
@@ -83,16 +87,16 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
         public void Set(string path, bool? allow)
         {
             var node = Get(path, true);
-            node.Allow = allow;
+            node!.Allow = allow;
             _logger.Debug($"Permission Node ADD {path} = {allow?.ToString() ?? "null"}");
         }
 
-        private PermissionNode Get(string path, bool edit = false)
+        private PermissionNode? Get(string path, bool edit = false, bool nullIfMissing = false)
         {
-            return Get(_root, path.ToLower(), edit);
+            return Get(_root, path.ToLower(), edit, nullIfMissing);
         }
 
-        private PermissionNode Get(PermissionNode node, string path, bool edit)
+        private PermissionNode? Get(PermissionNode node, string path, bool edit, bool nullIfMissing)
         {
             if (path.Length == 0)
                 return node;
@@ -103,12 +107,12 @@ namespace TwitchChatTTS.Chat.Groups.Permissions
             if (next == null)
             {
                 if (!edit)
-                    return node;
+                    return nullIfMissing ? null : node;
 
                 next = new PermissionNode(name, node, null);
                 node.Add(next);
             }
-            return Get(next, string.Join('.', parts.Skip(1)), edit);
+            return Get(next, string.Join('.', parts.Skip(1)), edit, nullIfMissing);
         }
 
         private sealed class PermissionNode
