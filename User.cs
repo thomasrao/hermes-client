@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using HermesSocketLibrary.Requests.Messages;
+using TwitchChatTTS.Twitch.Socket.Handlers;
 
 namespace TwitchChatTTS
 {
@@ -22,8 +23,7 @@ namespace TwitchChatTTS
         // voice names
         public HashSet<string> VoicesEnabled { get => _voicesEnabled; set { _voicesEnabled = value; VoiceNameRegex = GenerateEnabledVoicesRegex(); } }
 
-        public DateTime? RaidStart { get; set; }
-        public HashSet<long>? AllowedChatters { get; set; }
+        public IDictionary<string, RaidInfo> Raids { get; set; } = new Dictionary<string, RaidInfo>();
         public HashSet<long> Chatters { get; set; }
         public TTSWordFilter[] RegexFilters { get; set; }
         [JsonIgnore]

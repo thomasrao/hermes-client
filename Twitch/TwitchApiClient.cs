@@ -28,7 +28,7 @@ public class TwitchApiClient
         });
     }
 
-    public async Task<EventResponse<NotificationInfo>?> CreateEventSubscription(string type, string version, string sessionId, IDictionary<string, string> conditions)
+    private async Task<EventResponse<NotificationInfo>?> CreateEventSubscription(string type, string version, string sessionId, IDictionary<string, string> conditions)
     {
         var subscriptionData = new EventSubscriptionMessage(type, version, sessionId, conditions);
         var base_url = _configuration.Environment == "PROD" || string.IsNullOrWhiteSpace(_configuration.Twitch?.ApiUrl)
@@ -58,7 +58,7 @@ public class TwitchApiClient
             conditions.Add("from_broadcaster_user_id", from);
         if (to != null)
             conditions.Add("to_broadcaster_user_id", to);
-        
+
         return await CreateEventSubscription("channel.raid", version, sessionId, conditions);
     }
 

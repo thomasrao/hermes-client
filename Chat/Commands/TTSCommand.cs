@@ -214,27 +214,32 @@ namespace TwitchChatTTS.Chat.Commands
                     return;
                 }
 
-                string targetUserId = fragment.Mention!.UserId!;
+                string targetUserId = fragment.Mention!.UserId;
                 if (targetUserId == _user.TwitchUserId.ToString())
                 {
                     _logger.Warning("Cannot join yourself.");
                     return;
                 }
+                string targetUserLogin = fragment.Mention!.UserLogin;
 
                 string[] subscriptions = ["channel.chat.message", "channel.chat.message_delete", "channel.chat.clear_user_messages"];
                 foreach (var subscription in subscriptions)
+                    await Subscribe(subscription, targetUserId, targetUserLogin, async () => await _client.CreateEventSubscription(subscription, "1", _twitch.SessionId, _user.TwitchUserId.ToString(), targetUserId));
+                await Subscribe("channel.raid", targetUserId, targetUserLogin, async () => await _client.CreateChannelRaidEventSubscription("1", _twitch.SessionId, targetUserId));
+                _logger.Information($"Joined chat room [channel: {fragment.Mention.UserLogin}][channel: {targetUserLogin}][channel id: {targetUserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
+            }
+
+            private async Task Subscribe(string subscription, string targetId, string targetName, Func<Task<EventResponse<NotificationInfo>?>> subscribe)
+            {
+                _logger.Debug($"Attempting to subscribe to Twitch events [subscription: {subscription}][target channel: {targetName}][target channel id: {targetId}]");
+                var data = await subscribe.Invoke();
+                var info = data?.Data?.FirstOrDefault();
+                if (info == null)
                 {
-                    _logger.Debug($"Attempting to subscribe to Twitch events [subscription: {subscription}]");
-                    var data = await _client.CreateEventSubscription(subscription, "1", _twitch.SessionId, _user.TwitchUserId.ToString(), targetUserId);
-                    var info = data?.Data?.FirstOrDefault();
-                    if (info == null)
-                    {
-                        _logger.Warning("Could not find the subscription id.");
-                        continue;
-                    }
-                    _twitch.AddSubscription(targetUserId, subscription, info.Id);
+                    _logger.Warning("Could not find the subscription id.");
+                    return;
                 }
-                _logger.Information($"Joined chat room [channel: {fragment.Mention.UserLogin}][channel id: {targetUserId}][invoker: {message.ChatterUserLogin}][id: {message.ChatterUserId}]");
+                _twitch.AddSubscription(targetId, subscription, info.Id);
             }
         }
 
@@ -277,7 +282,7 @@ namespace TwitchChatTTS.Chat.Commands
                     return;
                 }
 
-                string[] subscriptions = ["channel.chat.message", "channel.chat.message_delete", "channel.chat.clear_user_messages"];
+                string[] subscriptions = ["channel.chat.message", "channel.chat.message_delete", "channel.chat.clear_user_messages", "channel.raid"];
                 foreach (var subscription in subscriptions)
                 {
                     var subscriptionId = _twitch.GetSubscriptionId(targetUserId, subscription);

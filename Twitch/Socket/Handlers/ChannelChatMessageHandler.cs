@@ -98,12 +98,6 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 return;
             }
 
-            if (_user.AllowedChatters != null && !_user.AllowedChatters.Contains(chatterId))
-            {
-                _logger.Information("Potential chat message from raider ignored due to potential raid message spam.");
-                return;
-            }
-
             if (message.Reply != null)
                 msg = msg.Substring(message.Reply.ParentUserLogin.Length + 2);
 
@@ -164,6 +158,12 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                     tasks.Add(_hermes.SendChatterDetails(chatterId, message.ChatterUserLogin));
                     _user.Chatters.Add(chatterId);
                 }
+            }
+
+            if (_user.Raids.TryGetValue(message.BroadcasterUserId, out var raid) && !raid.Chatters.Contains(chatterId))
+            {
+                _logger.Information($"Potential chat message from raider ignored due to potential raid message spam [chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
+                return;
             }
 
             // Replace filtered words.

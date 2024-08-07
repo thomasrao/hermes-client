@@ -26,40 +26,67 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 return;
 
             _logger.Information($"A raid has started. Starting raid spam prevention. [from: {message.FromBroadcasterUserLogin}][from id: {message.FromBroadcasterUserId}].");
-            var chatters = await _api.GetChatters(_user.TwitchUserId.ToString(), _user.TwitchUserId.ToString());
-            if (chatters?.Data == null)
-            {
-                _logger.Error("Could not fetch the list of chatters in chat.");
-                return;
-            }
+            EventResponse<ChatterMessage>? chatters = null;
 
-            var date = DateTime.Now;
-            lock (_lock)
+            if (!_user.Raids.ContainsKey(message.ToBroadcasterUserId))
             {
-                _user.RaidStart = date;
-                if (_user.AllowedChatters == null)
+                await _api.GetChatters(_user.TwitchUserId.ToString(), _user.TwitchUserId.ToString());
+                if (chatters?.Data == null)
                 {
-                    var chatterIds = chatters.Data.Select(c => long.Parse(c.UserId));
-                    _user.AllowedChatters = new HashSet<long>(chatterIds);
+                    var extraErrorInfo = _user.TwitchUserId.ToString() != message.ToBroadcasterUserId ? " Ensure you have moderator status in your joined channel(s) to prevent raid spam." : string.Empty;
+                    _logger.Error("Could not fetch the list of chatters in chat." + extraErrorInfo);
+                    return;
                 }
             }
 
-            Task.Run(async () => await EndOfRaidSpamProtection(date));
+            var startDate = DateTime.Now;
+            var endDate = startDate + TimeSpan.FromSeconds(30);
+            lock (_lock)
+            {
+                if (_user.Raids.TryGetValue(message.ToBroadcasterUserId, out var raid))
+                    raid.RaidSpamPreventionEndDate = endDate;
+                else
+                {
+                    var chatterIds = chatters!.Data!.Select(c => long.Parse(c.UserId));
+                    _user.Raids.Add(message.ToBroadcasterUserId, new RaidInfo(endDate, new HashSet<long>(chatterIds)));
+                }
+            }
+
+            Task.Run(async () => await EndOfRaidSpamProtection(message.ToBroadcasterUserId, endDate));
         }
 
-        private async Task EndOfRaidSpamProtection(DateTime date)
+        private async Task EndOfRaidSpamProtection(string raidedId, DateTime endDate)
         {
-            await Task.Delay(TimeSpan.FromSeconds(30));
+            await Task.Delay(endDate - DateTime.Now);
 
             lock (_lock)
             {
-                if (_user.RaidStart == date)
+                if (_user.Raids.TryGetValue(raidedId, out var raid))
                 {
-                    _logger.Information("Raid message spam prevention ended.");
-                    _user.RaidStart = null;
-                    _user.AllowedChatters = null;
+                    if (raid.RaidSpamPreventionEndDate == endDate)
+                    {
+                        _logger.Information("Raid message spam prevention ended.");
+                        _user.Raids.Remove(raidedId);
+                    }
+                    else
+                        _logger.Debug("Raid spam prevention would have stopped now if it wasn't for the consecutive raid.");
                 }
+                else
+                    _logger.Error("Something went wrong ending a raid spam prevention.");
             }
+        }
+    }
+
+    public sealed class RaidInfo
+    {
+        public DateTime RaidSpamPreventionEndDate { get; set; }
+        public HashSet<long> Chatters { get; set; }
+
+
+        public RaidInfo(DateTime raidEnd, HashSet<long> chatters)
+        {
+            RaidSpamPreventionEndDate = raidEnd;
+            Chatters = chatters;
         }
     }
 }
