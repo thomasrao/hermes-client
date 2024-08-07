@@ -14,6 +14,7 @@ using TwitchChatTTS.OBS.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Chat.Commands;
+using System.Text;
 
 namespace TwitchChatTTS
 {
@@ -76,6 +77,7 @@ namespace TwitchChatTTS
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             Console.Title = "TTS - Twitch Chat";
+            Console.OutputEncoding = Encoding.UTF8;
             License.iConfirmCommercialUse("abcdef");
 
             if (string.IsNullOrWhiteSpace(_configuration.Hermes?.Token))
@@ -98,7 +100,6 @@ namespace TwitchChatTTS
                 await Task.Delay(15 * 1000);
             }
 
-            await _twitch.Connect();
             await InitializeHermesWebsocket();
             try
             {
@@ -126,6 +127,7 @@ namespace TwitchChatTTS
                 await Task.Delay(TimeSpan.FromSeconds(30));
                 return;
             }
+            await _twitch.Connect();
 
             var emoteSet = await _sevenApiClient.FetchChannelEmoteSet(_user.TwitchUserId.ToString());
             if (emoteSet != null)
