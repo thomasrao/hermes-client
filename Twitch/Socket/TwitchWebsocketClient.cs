@@ -176,7 +176,7 @@ namespace TwitchChatTTS.Twitch.Socket
                 _logger.Warning("Twitch websocket message payload is null.");
                 return;
             }
-            await handler.Execute(this, data);
+            await Task.Run(async () => await handler.Execute(this, data));
         }
 
         public async Task Send<T>(string type, T data)

@@ -64,69 +64,73 @@ namespace TwitchChatTTS.Twitch.Socket
             client.Initialize();
             _backup = client;
 
-            client.OnIdentified += async (s, e) =>
-            {
-                bool clientDisconnect = false;
-                lock (_lock)
-                {
-                    if (_identified == null || _identified.ReceivedReconnecting)
-                    {
-                        if (_backup != null && _backup.UID == client.UID)
-                        {
-                            _logger.Information($"Twitch client has been identified [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
-                            _identified = _backup;
-                            _backup = null;
-                        }
-                        else
-                            _logger.Warning($"Twitch client identified from unknown sources [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
-                    }
-                    else if (_identified.UID == client.UID)
-                    {
-                        _logger.Warning($"Twitch client has been re-identified [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
-                    }
-                    else if (_backup == null || _backup.UID != client.UID)
-                    {
-                        _logger.Warning($"Twitch client has been identified, but isn't main or backup [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
-                        clientDisconnect = true;
-                    }
-                }
-
-                if (clientDisconnect)
-                    await client.DisconnectAsync(new SocketDisconnectionEventArgs("Closed", "No need for a tertiary client."));
-            };
-            client.OnDisconnected += async (s, e) =>
-            {
-                bool reconnecting = false;
-                lock (_lock)
-                {
-                    if (_identified?.UID == client.UID)
-                    {
-                        _logger.Warning($"Identified Twitch client has disconnected [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
-                        _identified = null;
-                        reconnecting = true;
-                    }
-                    else if (_backup?.UID == client.UID)
-                    {
-                        _logger.Warning($"Backup Twitch client has disconnected [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
-                        _backup = null;
-                    }
-                    else if (client.ReceivedReconnecting)
-                    {
-                        _logger.Debug($"Twitch client disconnected due to reconnection [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
-                    }
-                    else
-                        _logger.Error($"Twitch client disconnected from unknown source [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
-                }
-
-                if (reconnecting)
-                {
-                    var client = GetWorkingClient();
-                    await client.Connect();
-                }
-            };
+            client.OnIdentified += async (_, _) => await OnIdentified(client);
+            client.OnDisconnected += async (_, _) => await OnDisconnection(client);
 
             _logger.Debug("Created a Twitch websocket client.");
             return client;
+        }
+
+        private async Task OnDisconnection(TwitchWebsocketClient client)
+        {
+            bool reconnecting = false;
+            lock (_lock)
+            {
+                if (_identified?.UID == client.UID)
+                {
+                    _logger.Warning($"Identified Twitch client has disconnected [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
+                    _identified = null;
+                    reconnecting = true;
+                }
+                else if (_backup?.UID == client.UID)
+                {
+                    _logger.Warning($"Backup Twitch client has disconnected [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
+                    _backup = null;
+                }
+                else if (client.ReceivedReconnecting)
+                {
+                    _logger.Debug($"Twitch client disconnected due to reconnection [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
+                }
+                else
+                    _logger.Error($"Twitch client disconnected from unknown source [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
+            }
+
+            if (reconnecting)
+            {
+                var newClient = GetWorkingClient();
+                await newClient.Connect();
+            }
+        }
+
+        private async Task OnIdentified(TwitchWebsocketClient client)
+        {
+            bool clientDisconnect = false;
+            lock (_lock)
+            {
+                if (_identified == null || _identified.ReceivedReconnecting)
+                {
+                    if (_backup != null && _backup.UID == client.UID)
+                    {
+                        _logger.Information($"Twitch client has been identified [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
+                        _identified = _backup;
+                        _backup = null;
+                    }
+                    else
+                        _logger.Warning($"Twitch client identified from unknown sources [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
+                }
+                else if (_identified.UID == client.UID)
+                {
+                    _logger.Warning($"Twitch client has been re-identified [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
+                }
+                else if (_backup == null || _backup.UID != client.UID)
+                {
+                    _logger.Warning($"Twitch client has been identified, but isn't main or backup [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
+                    clientDisconnect = true;
+                }
+            }
+
+            if (clientDisconnect)
+                await client.DisconnectAsync(new SocketDisconnectionEventArgs("Closed", "No need for a tertiary client."));
         }
     }
 }
