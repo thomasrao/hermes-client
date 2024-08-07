@@ -31,6 +31,10 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 return;
             }
 
+            int waited = 0;
+            while (_user.TwitchUserId <= 0 && ++waited < 3)
+                await Task.Delay(TimeSpan.FromSeconds(1));
+
             try
             {
                 await _hermes.AuthorizeTwitch();
