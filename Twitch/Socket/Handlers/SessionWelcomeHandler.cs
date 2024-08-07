@@ -22,11 +22,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
 
         public async Task Execute(TwitchWebsocketClient sender, object data)
         {
-            if (sender == null)
-                return;
             if (data is not SessionWelcomeMessage message)
-                return;
-            if (_api == null)
                 return;
 
             if (string.IsNullOrEmpty(message.Session.Id))
@@ -43,15 +39,15 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             string[] subscriptionsv1 = [
                 "channel.chat.message",
                 "channel.chat.message_delete",
-                "channel.chat.notification",
                 "channel.chat.clear",
                 "channel.chat.clear_user_messages",
-                "channel.ad_break.begin",
                 "channel.subscribe",
                 "channel.subscription.gift",
                 "channel.subscription.message",
+                "channel.ad_break.begin",
                 "channel.ban",
-                "channel.channel_points_custom_reward_redemption.add"
+                "channel.channel_points_custom_reward_redemption.add",
+                "channel.raid"
             ];
             string[] subscriptionsv2 = [
                 "channel.follow",
@@ -92,7 +88,6 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 var response = await _api.CreateEventSubscription(subscriptionName, version, sessionId, broadcasterId);
                 if (response == null)
                 {
-                    _logger.Error($"Failed to create an event subscription [subscription type: {subscriptionName}][reason: response is null]");
                     return;
                 }
                 if (response.Data == null)

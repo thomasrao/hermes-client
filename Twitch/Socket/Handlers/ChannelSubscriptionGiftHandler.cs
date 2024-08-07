@@ -22,7 +22,11 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             if (data is not ChannelSubscriptionGiftMessage message)
                 return;
 
-            _logger.Debug("Gifted subscription occured.");
+            if (message.IsAnonymous)
+                _logger.Debug($"Gifted subscription occured [chatter: Anonymous][Tier: {message.Tier}][Count: {message.Total}]");
+            else
+                _logger.Debug($"Gifted subscription occured [chatter: {message.UserLogin}][chatter id: {message.UserId}][Tier: {message.Tier}][Count: {message.Total}][Cumulative Count: {message.CumulativeTotal}]");
+            
             try
             {
                 var actions = _redemptionManager.Get("subscription.gift");
@@ -36,7 +40,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 foreach (var action in actions)
                     try
                     {
-                        await _redemptionManager.Execute(action, message.UserName, long.Parse(message.UserId));
+                        await _redemptionManager.Execute(action, message.UserName ?? "Anonymous", message.UserId == null ? 0 : long.Parse(message.UserId));
                     }
                     catch (Exception ex)
                     {

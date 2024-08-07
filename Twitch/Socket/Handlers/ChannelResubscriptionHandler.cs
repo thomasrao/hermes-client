@@ -22,7 +22,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             if (data is not ChannelResubscriptionMessage message)
                 return;
 
-            _logger.Debug("Resubscription occured.");
+            _logger.Debug($"Resubscription occured [chatter: {message.UserLogin}][chatter id: {message.UserId}][Tier: {message.Tier}][Streak: {message.StreakMonths}][Cumulative: {message.CumulativeMonths}][Duration: {message.DurationMonths}]");
             try
             {
                 var actions = _redemptionManager.Get("subscription");
@@ -36,7 +36,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 foreach (var action in actions)
                     try
                     {
-                        await _redemptionManager.Execute(action, message.UserName, long.Parse(message.UserId));
+                        await _redemptionManager.Execute(action, message.UserName!, long.Parse(message.UserId!));
                     }
                     catch (Exception ex)
                     {

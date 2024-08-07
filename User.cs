@@ -22,6 +22,8 @@ namespace TwitchChatTTS
         // voice names
         public HashSet<string> VoicesEnabled { get => _voicesEnabled; set { _voicesEnabled = value; VoiceNameRegex = GenerateEnabledVoicesRegex(); } }
 
+        public DateTime? RaidStart { get; set; }
+        public HashSet<long>? AllowedChatters { get; set; }
         public HashSet<long> Chatters { get; set; }
         public TTSWordFilter[] RegexFilters { get; set; }
         [JsonIgnore]

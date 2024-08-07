@@ -24,7 +24,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             if (message.IsGifted)
                 return;
 
-            _logger.Debug("Subscription occured.");
+            _logger.Debug($"Subscription occured [chatter: {message.UserLogin}][chatter id: {message.UserId}][Tier: {message.Tier}]");
             try
             {
                 var actions = _redemptionManager.Get("subscription");
@@ -38,7 +38,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 foreach (var action in actions)
                     try
                     {
-                        await _redemptionManager.Execute(action, message.UserName, long.Parse(message.UserId));
+                        await _redemptionManager.Execute(action, message.UserName!, long.Parse(message.UserId!));
                     }
                     catch (Exception ex)
                     {

@@ -51,6 +51,19 @@ public class TwitchApiClient
         await _web.Delete($"{base_url}/eventsub/subscriptions?id=" + subscriptionId);
     }
 
+    public async Task<EventResponse<ChatterMessage>?> GetChatters(string broadcasterId, string? moderatorId = null)
+    {
+        moderatorId ??= broadcasterId;
+        var response = await _web.Get($"https://api.twitch.tv/helix/chat/chatters?broadcaster_id={broadcasterId}&moderator_id={moderatorId}");
+        if (response.StatusCode == HttpStatusCode.Accepted)
+        {
+            _logger.Debug($"Twitch API call [type: get chatters][response: {await response.Content.ReadAsStringAsync()}]");
+            return await response.Content.ReadFromJsonAsync(typeof(EventResponse<ChatterMessage>)) as EventResponse<ChatterMessage>;
+        }
+        _logger.Error($"Twitch API call failed [type: get chatters][response: {await response.Content.ReadAsStringAsync()}]");
+        return null;
+    }
+
     public async Task<EventResponse<NotificationInfo>?> GetSubscriptions(string? status = null, string? broadcasterId = null, string? after = null)
     {
         List<string> queryParams = new List<string>();

@@ -77,7 +77,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 return; // new MessageResult(MessageStatus.NotReady, -1, -1);
             }
 
-            var msg = message.Message.Text;
+            var msg = string.Join(string.Empty, message.Message.Fragments.Where(f => f.Type != "cheermote").Select(f => f.Text)).Trim();
             var chatterId = long.Parse(message.ChatterUserId);
             var tasks = new List<Task>();
 
@@ -98,12 +98,23 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 return;
             }
 
+            if (_user.AllowedChatters != null && !_user.AllowedChatters.Contains(chatterId))
+            {
+                _logger.Information("Potential chat message from raider ignored due to potential raid message spam.");
+                return;
+            }
+
             if (message.Reply != null)
                 msg = msg.Substring(message.Reply.ParentUserLogin.Length + 2);
 
+            var bits = message.Message.Fragments.Where(f => f.Type == "cheermote" && f.Cheermote != null)
+                .Select(f => f.Cheermote!.Bits)
+                .Sum();
             var permissionPath = "tts.chat.messages.read";
             if (!string.IsNullOrWhiteSpace(message.ChannelPointsCustomRewardId))
                 permissionPath = "tts.chat.redemptions.read";
+            else if (bits > 0)
+                permissionPath = "tts.chat.bits.read";
 
             var permission = chatterId == _user.OwnerId ? true : _permissionManager.CheckIfAllowed(groups, permissionPath);
             if (permission != true)
