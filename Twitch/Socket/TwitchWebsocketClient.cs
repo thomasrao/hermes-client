@@ -16,6 +16,7 @@ namespace TwitchChatTTS.Twitch.Socket
         private readonly IDictionary<string, Type> _messageTypes;
         private readonly IDictionary<string, string> _subscriptions;
         private readonly IBackoff _backoff;
+        private readonly Configuration _configuration;
         private DateTime _lastReceivedMessageTimestamp;
         private bool _disconnected;
         private readonly object _lock;
@@ -33,6 +34,7 @@ namespace TwitchChatTTS.Twitch.Socket
         public TwitchWebsocketClient(
             [FromKeyedServices("twitch")] IEnumerable<ITwitchSocketHandler> handlers,
             [FromKeyedServices("twitch")] IBackoff backoff,
+            Configuration configuration,
             ILogger logger
         ) : base(logger, new JsonSerializerOptions()
         {
@@ -42,6 +44,7 @@ namespace TwitchChatTTS.Twitch.Socket
         {
             _handlers = handlers.ToDictionary(h => h.Name, h => h);
             _backoff = backoff;
+            _configuration = configuration;
             _subscriptions = new Dictionary<string, string>();
             _lock = new object();
 
@@ -52,7 +55,11 @@ namespace TwitchChatTTS.Twitch.Socket
             _messageTypes.Add("notification", typeof(NotificationMessage));
 
             UID = Guid.NewGuid().ToString("D");
-            URL = "wss://eventsub.wss.twitch.tv/ws";
+            
+            if (_configuration.Environment == "PROD" || string.IsNullOrWhiteSpace(_configuration.Twitch?.WebsocketUrl))
+                URL = "wss://eventsub.wss.twitch.tv/ws";
+            else
+                URL = _configuration.Twitch.WebsocketUrl;
         }
 
 
@@ -96,16 +103,10 @@ namespace TwitchChatTTS.Twitch.Socket
                     _disconnected = true;
                 }
 
-                _logger.Information($"Twitch websocket client disconnected [status: {e.Status}][reason: {e.Reason}]");
+                _logger.Information($"Twitch websocket client disconnected [status: {e.Status}][reason: {e.Reason}][client: {UID}]");
 
                 Connected = false;
                 Identified = false;
-
-                if (!ReceivedReconnecting)
-                {
-                    _logger.Information("Attempting to reconnect to Twitch websocket server.");
-                    await Reconnect(_backoff, async () => await Connect());
-                }
             };
         }
 

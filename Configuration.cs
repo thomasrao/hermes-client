@@ -16,6 +16,8 @@ namespace TwitchChatTTS
         public class TwitchConfiguration {
             public IEnumerable<string>? Channels;
             public bool TtsWhenOffline;
+            public string? WebsocketUrl;
+            public string? ApiUrl;
         }
 
         public class OBSConfiguration {

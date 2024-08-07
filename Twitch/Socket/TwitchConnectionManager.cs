@@ -94,18 +94,20 @@ namespace TwitchChatTTS.Twitch.Socket
                 if (clientDisconnect)
                     await client.DisconnectAsync(new SocketDisconnectionEventArgs("Closed", "No need for a tertiary client."));
             };
-            client.OnDisconnected += (s, e) =>
+            client.OnDisconnected += async (s, e) =>
             {
+                bool reconnecting = false;
                 lock (_lock)
                 {
                     if (_identified?.UID == client.UID)
                     {
-                        _logger.Debug($"Identified Twitch client has disconnected [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
+                        _logger.Warning($"Identified Twitch client has disconnected [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
                         _identified = null;
+                        reconnecting = true;
                     }
                     else if (_backup?.UID == client.UID)
                     {
-                        _logger.Debug($"Backup Twitch client has disconnected [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
+                        _logger.Warning($"Backup Twitch client has disconnected [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
                         _backup = null;
                     }
                     else if (client.ReceivedReconnecting)
@@ -114,6 +116,12 @@ namespace TwitchChatTTS.Twitch.Socket
                     }
                     else
                         _logger.Error($"Twitch client disconnected from unknown source [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
+                }
+
+                if (reconnecting)
+                {
+                    var client = GetWorkingClient();
+                    await client.Connect();
                 }
             };
 

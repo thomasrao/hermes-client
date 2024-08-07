@@ -360,6 +360,9 @@ namespace TwitchChatTTS.Hermes.Socket
                     catch (Exception ex)
                     {
                         _logger.Error(ex, "Failed to disconnect from Hermes websocket server.");
+                        Ready = false;
+                        LoggedIn = false;
+                        Connected = false;
                     }
                     UserId = null;
                     _heartbeatTimer.Enabled = false;
@@ -381,6 +384,9 @@ namespace TwitchChatTTS.Hermes.Socket
                 catch (Exception ex)
                 {
                     _logger.Error(ex, "Failed to disconnect from Hermes websocket server.");
+                    Ready = false;
+                    LoggedIn = false;
+                    Connected = false;
                 }
             }
 
