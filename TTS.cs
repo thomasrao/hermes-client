@@ -21,7 +21,7 @@ namespace TwitchChatTTS
     public class TTS : IHostedService
     {
         public const int MAJOR_VERSION = 4;
-        public const int MINOR_VERSION = 0;
+        public const int MINOR_VERSION = 1;
 
         private readonly User _user;
         private readonly HermesApiClient _hermesApiClient;
