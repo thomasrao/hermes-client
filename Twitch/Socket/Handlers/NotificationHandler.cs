@@ -33,10 +33,11 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _messageTypes.Add("channel.adbreak.begin", typeof(ChannelAdBreakMessage));
             _messageTypes.Add("channel.ban", typeof(ChannelBanMessage));
             _messageTypes.Add("channel.chat.message", typeof(ChannelChatMessage));
-            _messageTypes.Add("channel.chat.clear_user_messages", typeof(ChannelChatClearUserMessage));
             _messageTypes.Add("channel.chat.clear", typeof(ChannelChatClearMessage));
+            _messageTypes.Add("channel.chat.clear_user_messages", typeof(ChannelChatClearUserMessage));
             _messageTypes.Add("channel.chat.message_delete", typeof(ChannelChatDeleteMessage));
             _messageTypes.Add("channel.channel_points_custom_reward_redemption.add", typeof(ChannelCustomRedemptionMessage));
+            _messageTypes.Add("channel.raid", typeof(ChannelRaidMessage));
             _messageTypes.Add("channel.follow", typeof(ChannelFollowMessage));
             _messageTypes.Add("channel.subscribe", typeof(ChannelSubscriptionMessage));
             _messageTypes.Add("channel.subscription.message", typeof(ChannelResubscriptionMessage));

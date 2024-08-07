@@ -31,9 +31,17 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 return;
             }
 
-            await _hermes.AuthorizeTwitch();
-            var token = await _hermes.FetchTwitchBotToken();
-            _api.Initialize(token);
+            try
+            {
+                await _hermes.AuthorizeTwitch();
+                var token = await _hermes.FetchTwitchBotToken();
+                _api.Initialize(token);
+            }
+            catch (Exception)
+            {
+                _logger.Error("Ensure you have your Twitch account linked on TTS. Restart application once you do.");
+                return;
+            }
 
             string broadcasterId = _user.TwitchUserId.ToString();
             string[] subscriptionsv1 = [
@@ -46,8 +54,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 "channel.subscription.message",
                 "channel.ad_break.begin",
                 "channel.ban",
-                "channel.channel_points_custom_reward_redemption.add",
-                "channel.raid"
+                "channel.channel_points_custom_reward_redemption.add"
             ];
             string[] subscriptionsv2 = [
                 "channel.follow",
@@ -77,6 +84,8 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "1");
             foreach (var subscription in subscriptionsv2)
                 await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "2");
+            
+            await Subscribe(sender, "channel.raid", broadcasterId, async () => await _api.CreateChannelRaidEventSubscription("1", message.Session.Id, to: broadcasterId));
 
             sender.Identify(message.Session.Id);
         }
@@ -86,6 +95,37 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             try
             {
                 var response = await _api.CreateEventSubscription(subscriptionName, version, sessionId, broadcasterId);
+                if (response == null)
+                {
+                    return;
+                }
+                if (response.Data == null)
+                {
+                    _logger.Error($"Failed to create an event subscription [subscription type: {subscriptionName}][reason: data is null]");
+                    return;
+                }
+                if (!response.Data.Any())
+                {
+                    _logger.Error($"Failed to create an event subscription [subscription type: {subscriptionName}][reason: data is empty]");
+                    return;
+                }
+
+                foreach (var d in response.Data)
+                    sender.AddSubscription(broadcasterId, d.Type, d.Id);
+
+                _logger.Information($"Sucessfully added subscription to Twitch websockets [subscription type: {subscriptionName}]");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to create an event subscription [subscription type: {subscriptionName}][reason: exception]");
+            }
+        }
+
+        private async Task Subscribe(TwitchWebsocketClient sender, string subscriptionName, string broadcasterId, Func<Task<EventResponse<NotificationInfo>?>> subscribe)
+        {
+            try
+            {
+                var response = await subscribe();
                 if (response == null)
                 {
                     return;

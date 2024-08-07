@@ -28,9 +28,8 @@ public class TwitchApiClient
         });
     }
 
-    public async Task<EventResponse<NotificationInfo>?> CreateEventSubscription(string type, string version, string sessionId, string userId, string? broadcasterId = null)
+    public async Task<EventResponse<NotificationInfo>?> CreateEventSubscription(string type, string version, string sessionId, IDictionary<string, string> conditions)
     {
-        var conditions = new Dictionary<string, string>() { { "user_id", userId }, { "broadcaster_user_id", broadcasterId ?? userId }, { "moderator_user_id", broadcasterId ?? userId } };
         var subscriptionData = new EventSubscriptionMessage(type, version, sessionId, conditions);
         var base_url = _configuration.Environment == "PROD" || string.IsNullOrWhiteSpace(_configuration.Twitch?.ApiUrl)
             ? "https://api.twitch.tv/helix" : _configuration.Twitch.ApiUrl;
@@ -38,10 +37,29 @@ public class TwitchApiClient
         if (response.StatusCode == HttpStatusCode.Accepted)
         {
             _logger.Debug($"Twitch API call [type: create event subscription][subscription type: {type}][response: {await response.Content.ReadAsStringAsync()}]");
-            return await response.Content.ReadFromJsonAsync(typeof(EventResponse<NotificationInfo>)) as EventResponse<NotificationInfo>;
+            return await response.Content.ReadFromJsonAsync(typeof(EventResponse<NotificationInfo>), _web.Options) as EventResponse<NotificationInfo>;
         }
         _logger.Error($"Twitch API call failed [type: create event subscription][subscription type: {type}][response: {await response.Content.ReadAsStringAsync()}]");
         return null;
+    }
+
+    public async Task<EventResponse<NotificationInfo>?> CreateEventSubscription(string type, string version, string sessionId, string userId, string? broadcasterId = null)
+    {
+        var conditions = new Dictionary<string, string>() { { "user_id", userId }, { "broadcaster_user_id", broadcasterId ?? userId }, { "moderator_user_id", broadcasterId ?? userId } };
+        return await CreateEventSubscription(type, version, sessionId, conditions);
+    }
+
+    public async Task<EventResponse<NotificationInfo>?> CreateChannelRaidEventSubscription(string version, string sessionId, string? from = null, string? to = null)
+    {
+        var conditions = new Dictionary<string, string>();
+        if (from == null && to == null)
+            throw new InvalidOperationException("Either or both from and to values must be non-null.");
+        if (from != null)
+            conditions.Add("from_broadcaster_user_id", from);
+        if (to != null)
+            conditions.Add("to_broadcaster_user_id", to);
+        
+        return await CreateEventSubscription("channel.raid", version, sessionId, conditions);
     }
 
     public async Task DeleteEventSubscription(string subscriptionId)
@@ -55,10 +73,10 @@ public class TwitchApiClient
     {
         moderatorId ??= broadcasterId;
         var response = await _web.Get($"https://api.twitch.tv/helix/chat/chatters?broadcaster_id={broadcasterId}&moderator_id={moderatorId}");
-        if (response.StatusCode == HttpStatusCode.Accepted)
+        if (response.StatusCode == HttpStatusCode.OK)
         {
             _logger.Debug($"Twitch API call [type: get chatters][response: {await response.Content.ReadAsStringAsync()}]");
-            return await response.Content.ReadFromJsonAsync(typeof(EventResponse<ChatterMessage>)) as EventResponse<ChatterMessage>;
+            return await response.Content.ReadFromJsonAsync(typeof(EventResponse<ChatterMessage>), _web.Options) as EventResponse<ChatterMessage>;
         }
         _logger.Error($"Twitch API call failed [type: get chatters][response: {await response.Content.ReadAsStringAsync()}]");
         return null;

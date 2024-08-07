@@ -6,13 +6,13 @@ namespace TwitchChatTTS.Helpers
     public class WebClientWrap
     {
         private readonly HttpClient _client;
-        private readonly JsonSerializerOptions _options;
+        public JsonSerializerOptions Options { get; }
 
 
         public WebClientWrap(JsonSerializerOptions options)
         {
             _client = new HttpClient();
-            _options = options;
+            Options = options;
         }
 
 
@@ -26,7 +26,7 @@ namespace TwitchChatTTS.Helpers
         public async Task<T?> GetJson<T>(string uri, JsonSerializerOptions? options = null)
         {
             var response = await _client.GetAsync(uri);
-            return JsonSerializer.Deserialize<T>(await response.Content.ReadAsStreamAsync(), options ?? _options);
+            return JsonSerializer.Deserialize<T>(await response.Content.ReadAsStreamAsync(), options ?? Options);
         }
 
         public async Task<HttpResponseMessage> Get(string uri)
@@ -36,17 +36,17 @@ namespace TwitchChatTTS.Helpers
 
         public async Task<HttpResponseMessage> Post<T>(string uri, T data)
         {
-            return await _client.PostAsJsonAsync(uri, data, _options);
+            return await _client.PostAsJsonAsync(uri, data, Options);
         }
 
         public async Task<HttpResponseMessage> Post(string uri)
         {
-            return await _client.PostAsJsonAsync(uri, new object(), _options);
+            return await _client.PostAsJsonAsync(uri, new object(), Options);
         }
 
         public async Task<T?> Delete<T>(string uri)
         {
-            return await _client.DeleteFromJsonAsync<T>(uri, _options);
+            return await _client.DeleteFromJsonAsync<T>(uri, Options);
         }
 
         public async Task<HttpResponseMessage> Delete(string uri)

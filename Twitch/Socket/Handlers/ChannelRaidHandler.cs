@@ -25,7 +25,8 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             if (data is not ChannelRaidMessage message)
                 return;
 
-            var chatters = await _api.GetChatters(message.ToBroadcasterUserId, message.ToBroadcasterUserLogin);
+            _logger.Information($"A raid has started. Starting raid spam prevention. [from: {message.FromBroadcasterUserLogin}][from id: {message.FromBroadcasterUserId}].");
+            var chatters = await _api.GetChatters(_user.TwitchUserId.ToString(), _user.TwitchUserId.ToString());
             if (chatters?.Data == null)
             {
                 _logger.Error("Could not fetch the list of chatters in chat.");
@@ -43,6 +44,11 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 }
             }
 
+            Task.Run(async () => await EndOfRaidSpamProtection(date));
+        }
+
+        private async Task EndOfRaidSpamProtection(DateTime date)
+        {
             await Task.Delay(TimeSpan.FromSeconds(30));
 
             lock (_lock)

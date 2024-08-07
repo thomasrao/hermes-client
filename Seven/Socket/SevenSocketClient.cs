@@ -105,7 +105,7 @@ namespace TwitchChatTTS.Seven.Socket
 
             if (!Connected)
             {
-                await Task.Delay(30000);
+                await Task.Delay(TimeSpan.FromSeconds(30));
                 await Connect();
             }
         }

@@ -43,7 +43,6 @@ namespace TwitchChatTTS
             User user,
             HermesApiClient hermesApiClient,
             SevenApiClient sevenApiClient,
-            TwitchApiClient twitchApiClient,
             [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
             [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
             [FromKeyedServices("7tv")] SocketClient<WebSocketMessage> seven,
@@ -60,7 +59,6 @@ namespace TwitchChatTTS
             _user = user;
             _hermesApiClient = hermesApiClient;
             _sevenApiClient = sevenApiClient;
-            _twitchApiClient = twitchApiClient;
             _hermes = (hermes as HermesSocketClient)!;
             _obs = (obs as OBSSocketClient)!;
             _seven = (seven as SevenSocketClient)!;
@@ -127,7 +125,17 @@ namespace TwitchChatTTS
                 await Task.Delay(TimeSpan.FromSeconds(30));
                 return;
             }
-            await _twitch.Connect();
+
+            try
+            {
+                await _twitch.Connect();
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e, "Failed to connect to Twitch websocket server.");
+                await Task.Delay(TimeSpan.FromSeconds(30));
+                return;
+            }
 
             var emoteSet = await _sevenApiClient.FetchChannelEmoteSet(_user.TwitchUserId.ToString());
             if (emoteSet != null)
