@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using System.Timers;
 using CommonSocketLibrary.Abstract;
+using CommonSocketLibrary.Backoff;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Requests.Callbacks;
 using HermesSocketLibrary.Requests.Messages;
@@ -24,8 +25,8 @@ namespace TwitchChatTTS.Hermes.Socket
         public DateTime LastHeartbeatReceived { get; set; }
         public DateTime LastHeartbeatSent { get; set; }
         public string? UserId { get; set; }
-        private System.Timers.Timer _heartbeatTimer;
-        private System.Timers.Timer _reconnectTimer;
+        private readonly System.Timers.Timer _heartbeatTimer;
+        private readonly IBackoff _backoff;
 
         public bool Connected { get; set; }
         public bool LoggedIn { get; set; }
@@ -36,6 +37,7 @@ namespace TwitchChatTTS.Hermes.Socket
             User user,
             Configuration configuration,
             ICallbackManager<HermesRequestData> callbackManager,
+            [FromKeyedServices("hermes")] IBackoff backoff,
             [FromKeyedServices("hermes")] IEnumerable<IWebSocketHandler> handlers,
             [FromKeyedServices("hermes")] MessageTypeManager<IWebSocketHandler> typeManager,
             ILogger logger
@@ -48,12 +50,9 @@ namespace TwitchChatTTS.Hermes.Socket
             _user = user;
             _configuration = configuration;
             _callbackManager = callbackManager;
-
+            _backoff = backoff;
             _heartbeatTimer = new System.Timers.Timer(TimeSpan.FromSeconds(15));
             _heartbeatTimer.Elapsed += async (sender, e) => await HandleHeartbeat(e);
-
-            _reconnectTimer = new System.Timers.Timer(TimeSpan.FromSeconds(15));
-            _reconnectTimer.Elapsed += async (sender, e) => await Reconnect(e);
 
             LastHeartbeatReceived = LastHeartbeatSent = DateTime.UtcNow;
             URL = $"wss://{BASE_URL}";
@@ -216,7 +215,6 @@ namespace TwitchChatTTS.Hermes.Socket
                 Connected = true;
                 _logger.Information("Hermes websocket client connected.");
 
-                _reconnectTimer.Enabled = false;
                 _heartbeatTimer.Enabled = true;
                 LastHeartbeatReceived = DateTime.UtcNow;
 
@@ -228,7 +226,7 @@ namespace TwitchChatTTS.Hermes.Socket
                 });
             };
 
-            OnDisconnected += (sender, e) =>
+            OnDisconnected += async (sender, e) =>
             {
                 Connected = false;
                 LoggedIn = false;
@@ -236,7 +234,7 @@ namespace TwitchChatTTS.Hermes.Socket
                 _logger.Warning("Hermes websocket client disconnected.");
 
                 _heartbeatTimer.Enabled = false;
-                _reconnectTimer.Enabled = true;
+                await Reconnect(_backoff, async () => await Connect());
             };
         }
 
@@ -336,7 +334,7 @@ namespace TwitchChatTTS.Hermes.Socket
         {
             var signalTime = e.SignalTime.ToUniversalTime();
 
-            if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(60))
+            if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(30))
             {
                 if (LastHeartbeatReceived > LastHeartbeatSent)
                 {
@@ -351,7 +349,7 @@ namespace TwitchChatTTS.Hermes.Socket
                         _logger.Error(ex, "Failed to send a heartbeat back to the Hermes websocket server.");
                     }
                 }
-                else if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(120))
+                else if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(60))
                 {
                     try
                     {
@@ -364,11 +362,9 @@ namespace TwitchChatTTS.Hermes.Socket
                         LoggedIn = false;
                         Connected = false;
                     }
+
                     UserId = null;
                     _heartbeatTimer.Enabled = false;
-
-                    _logger.Warning("Logged off due to disconnection. Attempting to reconnect...");
-                    _reconnectTimer.Enabled = true;
                 }
             }
         }

@@ -15,12 +15,13 @@ namespace TwitchChatTTS.Seven.Socket.Handlers
             _logger = logger;
         }
 
-        public async Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
+        public Task Execute<Data>(SocketClient<WebSocketMessage> sender, Data data)
         {
             if (data is not ReconnectMessage message || message == null)
-                return;
+                return Task.CompletedTask;
 
-            _logger.Information($"7tv server wants this client to reconnect (reason: {message.Reason}).");
+            _logger.Information($"7tv server wants this client to reconnect [reason: {message.Reason}]");
+            return Task.CompletedTask;
         }
     }
 }

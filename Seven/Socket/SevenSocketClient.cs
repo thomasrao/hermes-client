@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Seven.Socket.Data;
 using System.Text.Json;
+using CommonSocketLibrary.Backoff;
 
 namespace TwitchChatTTS.Seven.Socket
 {
@@ -14,12 +15,15 @@ namespace TwitchChatTTS.Seven.Socket
         private readonly int[] _reconnectDelay;
         private string? URL;
 
+        private readonly IBackoff _backoff;
+
         public bool Connected { get; set; }
 
         public SevenHelloMessage? ConnectionDetails { get; set; }
 
         public SevenSocketClient(
             User user,
+            [FromKeyedServices("7tv")] IBackoff backoff,
             [FromKeyedServices("7tv")] IEnumerable<IWebSocketHandler> handlers,
             [FromKeyedServices("7tv")] MessageTypeManager<IWebSocketHandler> typeManager,
             ILogger logger
@@ -30,6 +34,7 @@ namespace TwitchChatTTS.Seven.Socket
         }, logger)
         {
             _user = user;
+            _backoff = backoff;
             ConnectionDetails = null;
 
             _errorCodes = [
@@ -102,12 +107,6 @@ namespace TwitchChatTTS.Seven.Socket
             {
                 _logger.Error(ex, "Could not connect to 7tv websocket.");
             }
-
-            if (!Connected)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(30));
-                await Connect();
-            }
         }
 
         private async void OnDisconnection(object? sender, SocketDisconnectionEventArgs e)
@@ -128,27 +127,29 @@ namespace TwitchChatTTS.Seven.Socket
                     _logger.Error($"7tv client will remain disconnected due to a bad client implementation.");
                     return;
                 }
-                else if (_reconnectDelay[code] > 0)
-                    await Task.Delay(_reconnectDelay[code]);
+                else if (_reconnectDelay[code] > 1000)
+                    await Task.Delay(_reconnectDelay[code] - 1000);
             }
             else
             {
                 _logger.Warning("Unknown 7tv disconnection.");
-                await Task.Delay(TimeSpan.FromSeconds(30));
             }
 
-            await Connect();
-            await Task.Delay(TimeSpan.FromMilliseconds(500));
+            Task.Run(async () =>
+            {
+                await Reconnect(_backoff, async () => await Connect());
+                await Task.Delay(TimeSpan.FromMilliseconds(500));
 
-            if (Connected && ConnectionDetails?.SessionId != null)
-            {
-                await Send(34, new ResumeMessage() { SessionId = ConnectionDetails.SessionId });
-                _logger.Debug("Resumed connection to 7tv websocket.");
-            }
-            else
-            {
-                _logger.Debug("Resumed connection to 7tv websocket on a different session.");
-            }
+                if (Connected && ConnectionDetails?.SessionId != null)
+                {
+                    await Send(34, new ResumeMessage() { SessionId = ConnectionDetails.SessionId });
+                    _logger.Debug("Resumed connection to 7tv websocket.");
+                }
+                else
+                {
+                    _logger.Debug("Resumed connection to 7tv websocket on a different session.");
+                }
+            });
         }
     }
 }

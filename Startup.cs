@@ -99,6 +99,7 @@ s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, OBSMessageTypeManager
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, OBSSocketClient>("obs");
 
 // 7tv websocket
+s.AddKeyedSingleton<IBackoff>("7tv", new ExponentialBackoff(1000, 30 * 1000));
 s.AddKeyedSingleton<IWebSocketHandler, SevenHelloHandler>("7tv");
 s.AddKeyedSingleton<IWebSocketHandler, DispatchHandler>("7tv");
 s.AddKeyedSingleton<IWebSocketHandler, ReconnectHandler>("7tv");
@@ -142,6 +143,7 @@ s.AddKeyedSingleton<ITwitchSocketHandler, ChannelSubscriptionHandler>("twitch-no
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelSubscriptionGiftHandler>("twitch-notifications");
 
 // hermes websocket
+s.AddKeyedSingleton<IBackoff>("hermes", new ExponentialBackoff(1000, 15 * 1000));
 s.AddKeyedSingleton<IWebSocketHandler, HeartbeatHandler>("hermes");
 s.AddKeyedSingleton<IWebSocketHandler, LoginAckHandler>("hermes");
 s.AddKeyedSingleton<IWebSocketHandler, RequestAckHandler>("hermes");
