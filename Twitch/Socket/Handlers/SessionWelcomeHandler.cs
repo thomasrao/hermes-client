@@ -7,14 +7,12 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
     {
         public string Name => "session_welcome";
 
-        private readonly HermesApiClient _hermes;
         private readonly TwitchApiClient _api;
         private readonly User _user;
         private readonly ILogger _logger;
 
-        public SessionWelcomeHandler(HermesApiClient hermes, TwitchApiClient api, User user, ILogger logger)
+        public SessionWelcomeHandler(TwitchApiClient api, User user, ILogger logger)
         {
-            _hermes = hermes;
             _api = api;
             _user = user;
             _logger = logger;
@@ -32,18 +30,24 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             }
 
             int waited = 0;
-            while (_user.TwitchUserId <= 0 && ++waited < 3)
+            while ((_user.TwitchUserId <= 0 || _user.TwitchConnection == null) && ++waited < 5)
                 await Task.Delay(TimeSpan.FromSeconds(1));
 
-            try
+            if (_user.TwitchConnection == null)
             {
-                await _hermes.AuthorizeTwitch();
-                var token = await _hermes.FetchTwitchBotToken();
-                _api.Initialize(token);
+                _logger.Error("Ensure you have linked either your Twitch account or TTS' bot to your TTS account. Twitch client will not be connecting.");
+                return;
             }
-            catch (Exception)
-            {
-                _logger.Error("Ensure you have your Twitch account linked on TTS. Restart application once you do.");
+
+            _api.Initialize(_user.TwitchConnection.ClientId, _user.TwitchConnection.AccessToken);
+            var span = DateTime.Now - _user.TwitchConnection.ExpiresAt;
+            var timeLeft = span.TotalDays >= 2 ? Math.Floor(span.TotalDays) + " days" : (span.TotalHours >= 2 ? Math.Floor(span.TotalHours) + " hours" : Math.Floor(span.TotalMinutes) + " minutes");
+            if (span.TotalDays >= 3)
+                _logger.Information($"Twitch connection has {timeLeft} before it is revoked.");
+            else if (span.TotalMinutes >= 0)
+                _logger.Warning($"Twitch connection has {timeLeft} before it is revoked. Refreshing the token is soon required.");
+            else {
+                _logger.Error("Twitch connection has its permissions revoked. Refresh the token. Twith client will not be connecting.");
                 return;
             }
 
@@ -88,7 +92,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "1");
             foreach (var subscription in subscriptionsv2)
                 await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "2");
-            
+
             await Subscribe(sender, "channel.raid", broadcasterId, async () => await _api.CreateChannelRaidEventSubscription("1", message.Session.Id, to: broadcasterId));
 
             sender.Identify(message.Session.Id);

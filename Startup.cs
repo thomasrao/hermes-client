@@ -69,6 +69,7 @@ s.AddSingleton(new JsonSerializerOptions()
 s.AddSingleton<IChatCommand, SkipCommand>();
 s.AddSingleton<IChatCommand, VoiceCommand>();
 s.AddSingleton<IChatCommand, RefreshCommand>();
+s.AddSingleton<IChatCommand, NightbotCommand>();
 s.AddSingleton<IChatCommand, OBSCommand>();
 s.AddSingleton<IChatCommand, TTSCommand>();
 s.AddSingleton<IChatCommand, VersionCommand>();
@@ -106,6 +107,9 @@ s.AddKeyedSingleton<IWebSocketHandler, EndOfStreamHandler>("7tv");
 
 s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, SevenMessageTypeManager>("7tv");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");
+
+// Nightbot
+s.AddSingleton<NightbotApiClient>();
 
 // twitch websocket
 s.AddKeyedSingleton<IBackoff>("twitch", new ExponentialBackoff(1000, 120 * 1000));

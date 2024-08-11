@@ -1,3 +1,4 @@
+using System.Net.Http.Formatting;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -42,6 +43,11 @@ namespace TwitchChatTTS.Helpers
         public async Task<HttpResponseMessage> Post(string uri)
         {
             return await _client.PostAsJsonAsync(uri, new object(), Options);
+        }
+
+        public async Task<HttpResponseMessage> Put<T>(string uri, T data)
+        {
+            return await _client.PutAsJsonAsync(uri, data, Options);
         }
 
         public async Task<T?> Delete<T>(string uri)

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using HermesSocketLibrary.Requests.Messages;
+using HermesSocketLibrary.Socket.Data;
 using TwitchChatTTS.Twitch.Socket.Handlers;
 
 namespace TwitchChatTTS
@@ -14,6 +15,9 @@ namespace TwitchChatTTS
         public string TwitchUsername { get; set; }
         public string SevenEmoteSetId { get; set; }
         public long? OwnerId { get; set; }
+
+        public Connection? TwitchConnection { get; set; }
+        public Connection? NightbotConnection { get; set; }
 
         public string DefaultTTSVoice { get; set; }
         // voice id -> voice name

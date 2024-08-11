@@ -17,6 +17,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
         private readonly User _user;
         private readonly OBSSocketClient _obs;
         private readonly HermesSocketClient _hermes;
+        private readonly NightbotApiClient _nightbot;
         private readonly AudioPlaybackEngine _playback;
         private readonly ILogger _logger;
         private readonly Random _random;
@@ -27,6 +28,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
             User user,
             [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
             [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
+            NightbotApiClient nightbot,
             AudioPlaybackEngine playback,
             ILogger logger)
         {
@@ -34,6 +36,7 @@ namespace TwitchChatTTS.Twitch.Redemptions
             _user = user;
             _obs = (obs as OBSSocketClient)!;
             _hermes = (hermes as HermesSocketClient)!;
+            _nightbot = nightbot;
             _playback = playback;
             _logger = logger;
             _random = new Random();
@@ -190,6 +193,21 @@ namespace TwitchChatTTS.Twitch.Redemptions
                         }
                         _playback.PlaySound(action.Data["file_path"]);
                         _logger.Debug($"Played an audio file for channel point redeem [file: {action.Data["file_path"]}][chatter: {senderDisplayName}][chatter id: {senderId}]");
+                        break;
+                    case "NIGHTBOT_PLAY":
+                        await _nightbot.Play();
+                        break;
+                    case "NIGHTBOT_PAUSE":
+                        await _nightbot.Pause();
+                        break;
+                    case "NIGHTBOT_SKIP":
+                        await _nightbot.Skip();
+                        break;
+                    case "NIGHTBOT_CLEAR_PLAYLIST":
+                        await _nightbot.ClearPlaylist();
+                        break;
+                    case "NIGHTBOT_CLEAR_QUEUE":
+                        await _nightbot.ClearQueue();
                         break;
                     default:
                         _logger.Warning($"Unknown redeemable action has occured. Update needed? [type: {action.Type}][chatter: {senderDisplayName}][chatter id: {senderId}]");

@@ -95,9 +95,9 @@ public class TwitchApiClient
         return await _web.GetJson<EventResponse<NotificationInfo>>("https://api.twitch.tv/helix/eventsub/subscriptions" + query);
     }
 
-    public void Initialize(TwitchBotToken token)
+    public void Initialize(string clientId, string accessToken)
     {
-        _web.AddHeader("Authorization", "Bearer " + token.AccessToken);
-        _web.AddHeader("Client-Id", token.ClientId);
+        _web.AddHeader("Authorization", "Bearer " + accessToken);
+        _web.AddHeader("Client-Id", clientId);
     }
 }
