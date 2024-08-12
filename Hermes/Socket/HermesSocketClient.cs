@@ -27,6 +27,7 @@ namespace TwitchChatTTS.Hermes.Socket
         public string? UserId { get; set; }
         private readonly System.Timers.Timer _heartbeatTimer;
         private readonly IBackoff _backoff;
+        private readonly object _lock;
 
         public bool Connected { get; set; }
         public bool LoggedIn { get; set; }
@@ -56,13 +57,18 @@ namespace TwitchChatTTS.Hermes.Socket
 
             LastHeartbeatReceived = LastHeartbeatSent = DateTime.UtcNow;
             URL = $"wss://{BASE_URL}";
+
+            _lock = new object();
         }
 
 
         public async Task Connect()
         {
-            if (Connected)
-                return;
+            lock (_lock)
+            {
+                if (Connected)
+                    return;
+            }
 
             _logger.Debug($"Attempting to connect to {URL}");
             await ConnectAsync(URL);
@@ -70,8 +76,11 @@ namespace TwitchChatTTS.Hermes.Socket
 
         private async Task Disconnect()
         {
-            if (!Connected)
-                return;
+            lock (_lock)
+            {
+                if (!Connected)
+                    return;
+            }
 
             await DisconnectAsync(new SocketDisconnectionEventArgs("Normal disconnection", "Disconnection was executed"));
         }
@@ -212,7 +221,12 @@ namespace TwitchChatTTS.Hermes.Socket
 
             OnConnected += async (sender, e) =>
             {
-                Connected = true;
+                lock (_lock)
+                {
+                    if (Connected)
+                        return;
+                    Connected = true;
+                }
                 _logger.Information("Hermes websocket client connected.");
 
                 _heartbeatTimer.Enabled = true;
@@ -228,7 +242,13 @@ namespace TwitchChatTTS.Hermes.Socket
 
             OnDisconnected += async (sender, e) =>
             {
-                Connected = false;
+                lock (_lock)
+                {
+                    if (!Connected)
+                        return;
+                    Connected = false;
+                }
+
                 LoggedIn = false;
                 Ready = false;
                 _logger.Warning("Hermes websocket client disconnected.");
@@ -334,7 +354,7 @@ namespace TwitchChatTTS.Hermes.Socket
         {
             var signalTime = e.SignalTime.ToUniversalTime();
 
-            if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(30))
+            if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(60))
             {
                 if (LastHeartbeatReceived > LastHeartbeatSent)
                 {
@@ -349,7 +369,7 @@ namespace TwitchChatTTS.Hermes.Socket
                         _logger.Error(ex, "Failed to send a heartbeat back to the Hermes websocket server.");
                     }
                 }
-                else if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(60))
+                else if (signalTime - LastHeartbeatReceived > TimeSpan.FromSeconds(120))
                 {
                     try
                     {
@@ -366,37 +386,6 @@ namespace TwitchChatTTS.Hermes.Socket
                     UserId = null;
                     _heartbeatTimer.Enabled = false;
                 }
-            }
-        }
-
-        private async Task Reconnect(ElapsedEventArgs e)
-        {
-            if (Connected)
-            {
-                try
-                {
-                    await Disconnect();
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Failed to disconnect from Hermes websocket server.");
-                    Ready = false;
-                    LoggedIn = false;
-                    Connected = false;
-                }
-            }
-
-            try
-            {
-                await Connect();
-            }
-            catch (WebSocketException wse) when (wse.Message.Contains("502"))
-            {
-                _logger.Error($"Hermes websocket server cannot be found [code: {wse.ErrorCode}]");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to reconnect to Hermes websocket server.");
             }
         }
 

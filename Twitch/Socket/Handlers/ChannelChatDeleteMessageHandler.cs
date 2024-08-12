@@ -1,4 +1,5 @@
 using Serilog;
+using TwitchChatTTS.Chat.Soeech;
 using TwitchChatTTS.Twitch.Socket.Messages;
 
 namespace TwitchChatTTS.Twitch.Socket.Handlers
@@ -25,7 +26,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             
             if (_player.Playing?.MessageId == message.MessageId)
             {
-                _playback.RemoveMixerInput(_player.Playing.Audio!);
+                _playback.RemoveMixerInput(_player.Playing!.Audio!);
                 _player.Playing = null;
             }
             else

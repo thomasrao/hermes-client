@@ -15,6 +15,8 @@ using TwitchChatTTS.Twitch.Socket.Messages;
 using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Chat.Commands;
 using System.Text;
+using TwitchChatTTS.Chat.Soeech;
+using NAudio.Wave;
 
 namespace TwitchChatTTS
 {
@@ -26,7 +28,6 @@ namespace TwitchChatTTS
         private readonly User _user;
         private readonly HermesApiClient _hermesApiClient;
         private readonly SevenApiClient _sevenApiClient;
-        private readonly TwitchApiClient _twitchApiClient;
         private readonly HermesSocketClient _hermes;
         private readonly OBSSocketClient _obs;
         private readonly SevenSocketClient _seven;
@@ -149,7 +150,7 @@ namespace TwitchChatTTS
 
             _playback.AddOnMixerInputEnded((object? s, SampleProviderEventArgs e) =>
             {
-                if (e.SampleProvider == _player.Playing?.Audio)
+                if (_player.Playing?.Audio == e.SampleProvider)
                 {
                     _player.Playing = null;
                 }
@@ -167,22 +168,46 @@ namespace TwitchChatTTS
                             return;
                         }
 
-                        var m = _player.ReceiveBuffer();
-                        if (m == null)
+                        var group = _player.ReceiveBuffer();
+                        if (group == null)
                         {
                             await Task.Delay(200);
                             continue;
                         }
 
-                        string url = $"https://api.streamelements.com/kappa/v2/speech?voice={m.Voice}&text={HttpUtility.UrlEncode(m.Message)}";
-                        var sound = new NetworkWavSound(url);
-                        var provider = new CachedWavProvider(sound);
-                        var data = _playback.ConvertSound(provider);
-                        var resampled = new WdlResamplingSampleProvider(data, _playback.SampleRate);
-                        _logger.Verbose("Fetched TTS audio data.");
+                        Task.Run(() =>
+                        {
+                            var list = new List<ISampleProvider>();
+                            foreach (var message in group.Messages)
+                            {
+                                if (string.IsNullOrEmpty(message.Message))
+                                {
+                                    using (var reader2 = new AudioFileReader(message.File))
+                                    {
+                                        list.Add(_playback.ConvertSound(reader2.ToWaveProvider()));
+                                    }
+                                    continue;
+                                }
 
-                        m.Audio = resampled;
-                        _player.Ready(m);
+                                try
+                                {
+                                    string url = $"https://api.streamelements.com/kappa/v2/speech?voice={message.Voice}&text={HttpUtility.UrlEncode(message.Message.Trim())}";
+                                    var nws = new NetworkWavSound(url);
+                                    var provider = new CachedWavProvider(nws);
+                                    var data = _playback.ConvertSound(provider);
+                                    var resampled = new WdlResamplingSampleProvider(data, _playback.SampleRate);
+                                    list.Add(resampled);
+                                }
+                                catch (Exception e)
+                                {
+                                    _logger.Error(e, "Failed to fetch TTS message for ");
+                                }
+                            }
+
+                            var merged = new ConcatenatingSampleProvider(list);
+                            group.Audio = merged;
+                            _player.Ready(group);
+                        });
                     }
                     catch (COMException e)
                     {
@@ -211,25 +236,18 @@ namespace TwitchChatTTS
                             await Task.Delay(200);
                             continue;
                         }
-                        var m = _player.ReceiveReady();
-                        if (m == null)
+                        var g = _player.ReceiveReady();
+                        if (g == null)
                         {
                             continue;
                         }
 
-                        if (!string.IsNullOrWhiteSpace(m.File) && File.Exists(m.File))
-                        {
-                            _logger.Debug("Playing audio file via TTS: " + m.File);
-                            _playback.PlaySound(m.File);
-                            continue;
-                        }
+                        var audio = g.Audio;
 
-                        _logger.Debug("Playing message via TTS: " + m.Message);
-
-                        if (m.Audio != null)
+                        if (audio != null)
                         {
-                            _player.Playing = m;
-                            _playback.AddMixerInput(m.Audio);
+                            _player.Playing = g;
+                            _playback.AddMixerInput(audio);
                         }
                     }
                     catch (Exception e)

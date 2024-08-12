@@ -1,4 +1,5 @@
 using Serilog;
+using TwitchChatTTS.Chat.Messaging;
 using TwitchChatTTS.Twitch.Redemptions;
 using TwitchChatTTS.Twitch.Socket.Messages;
 
@@ -8,11 +9,13 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
     {
         public string Name => "channel.subscription.message";
 
+        private readonly ChatMessageReader _reader;
         private readonly IRedemptionManager _redemptionManager;
         private readonly ILogger _logger;
 
-        public ChannelResubscriptionHandler(IRedemptionManager redemptionManager, ILogger logger)
+        public ChannelResubscriptionHandler(ChatMessageReader reader, IRedemptionManager redemptionManager, ILogger logger)
         {
+            _reader = reader;
             _redemptionManager = redemptionManager;
             _logger = logger;
         }

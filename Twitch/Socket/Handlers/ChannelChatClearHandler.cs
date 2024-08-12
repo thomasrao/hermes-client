@@ -1,4 +1,5 @@
 using Serilog;
+using TwitchChatTTS.Chat.Soeech;
 using TwitchChatTTS.Twitch.Socket.Messages;
 
 namespace TwitchChatTTS.Twitch.Socket.Handlers

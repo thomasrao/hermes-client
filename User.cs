@@ -43,7 +43,7 @@ namespace TwitchChatTTS
                 return null;
 
             var enabledVoicesString = string.Join("|", VoicesAvailable.Where(v => VoicesEnabled == null || !VoicesEnabled.Any() || VoicesEnabled.Contains(v.Value)).Select(v => v.Value));
-            return new Regex($@"\b({enabledVoicesString})\:(.*?)(?=\Z|\b(?:{enabledVoicesString})\:)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            return new Regex($@"(?:\A|\s)(?<voice>{enabledVoicesString}):(?<message>.*?)(?=\Z|\s(?:{enabledVoicesString})\:)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         }
     }
 }

@@ -29,6 +29,8 @@ using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using TwitchChatTTS.Twitch.Socket.Handlers;
 using CommonSocketLibrary.Backoff;
+using TwitchChatTTS.Chat.Soeech;
+using TwitchChatTTS.Chat.Messaging;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -111,6 +113,8 @@ s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");
 
 // Nightbot
 s.AddSingleton<NightbotApiClient>();
+
+s.AddSingleton<ChatMessageReader>();
 
 // twitch websocket
 s.AddKeyedSingleton<IBackoff>("twitch", new ExponentialBackoff(1000, 120 * 1000));
