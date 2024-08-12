@@ -43,6 +43,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _logger.Debug($"Reconnection received [receiver: {sender.UID}][main: {identified.UID}][backup: {backup.UID}]");
 
             backup.URL = message.Session.ReconnectUrl;
+            backup.TwitchReconnected = true;
             await backup.Connect();
         }
     }

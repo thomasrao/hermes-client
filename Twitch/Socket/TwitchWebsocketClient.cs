@@ -29,6 +29,7 @@ namespace TwitchChatTTS.Twitch.Socket
         public bool Identified { get; private set; }
         public string SessionId { get; private set; }
         public bool ReceivedReconnecting { get; set; }
+        public bool TwitchReconnected { get; set; }
 
 
         public TwitchWebsocketClient(

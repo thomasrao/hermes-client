@@ -46,87 +46,65 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 _logger.Information($"Twitch connection has {timeLeft} before it is revoked.");
             else if (span.Minutes >= 0)
                 _logger.Warning($"Twitch connection has {timeLeft} before it is revoked. Refreshing the token is soon required.");
-            else {
+            else
+            {
                 _logger.Error("Twitch connection has its permissions revoked. Refresh the token. Twith client will not be connecting.");
                 return;
             }
 
-            string broadcasterId = _user.TwitchUserId.ToString();
-            string[] subscriptionsv1 = [
-                "channel.chat.message",
-                "channel.chat.message_delete",
-                "channel.chat.clear",
-                "channel.chat.clear_user_messages",
-                "channel.subscribe",
-                "channel.subscription.gift",
-                "channel.subscription.message",
-                "channel.ad_break.begin",
-                "channel.ban",
-                "channel.channel_points_custom_reward_redemption.add"
-            ];
-            string[] subscriptionsv2 = [
-                "channel.follow",
-            ];
-
-            string? pagination = null;
-            int size = 0;
-            do
+            if (!sender.TwitchReconnected)
             {
-                var subscriptionsData = await _api.GetSubscriptions(status: "enabled", broadcasterId: broadcasterId, after: pagination);
-                var subscriptionNames = subscriptionsData?.Data == null ? [] : subscriptionsData.Data.Select(s => s.Type).ToArray();
+                string broadcasterId = _user.TwitchUserId.ToString();
+                string[] subscriptionsv1 = [
+                    "channel.chat.message",
+                    "channel.chat.message_delete",
+                    "channel.chat.clear",
+                    "channel.chat.clear_user_messages",
+                    "channel.subscribe",
+                    "channel.subscription.gift",
+                    "channel.subscription.message",
+                    "channel.ad_break.begin",
+                    "channel.ban",
+                    "channel.channel_points_custom_reward_redemption.add"
+                ];
+                string[] subscriptionsv2 = [
+                    "channel.follow",
+                ];
 
-                if (subscriptionNames.Length == 0)
-                    break;
+                string? pagination = null;
+                int size = 0;
+                do
+                {
+                    var subscriptionsData = await _api.GetSubscriptions(status: "enabled", broadcasterId: broadcasterId, after: pagination);
+                    var subscriptionNames = subscriptionsData?.Data == null ? [] : subscriptionsData.Data.Select(s => s.Type).ToArray();
 
-                foreach (var d in subscriptionsData!.Data!)
-                    sender.AddSubscription(broadcasterId, d.Type, d.Id);
+                    if (subscriptionNames.Length == 0)
+                        break;
 
-                subscriptionsv1 = subscriptionsv1.Except(subscriptionNames).ToArray();
-                subscriptionsv2 = subscriptionsv2.Except(subscriptionNames).ToArray();
+                    foreach (var d in subscriptionsData!.Data!)
+                        sender.AddSubscription(broadcasterId, d.Type, d.Id);
 
-                pagination = subscriptionsData?.Pagination?.Cursor;
-                size = subscriptionNames.Length;
-            } while (size >= 100 && pagination != null && subscriptionsv1.Length + subscriptionsv2.Length > 0);
+                    subscriptionsv1 = subscriptionsv1.Except(subscriptionNames).ToArray();
+                    subscriptionsv2 = subscriptionsv2.Except(subscriptionNames).ToArray();
 
-            foreach (var subscription in subscriptionsv1)
-                await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "1");
-            foreach (var subscription in subscriptionsv2)
-                await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "2");
+                    pagination = subscriptionsData?.Pagination?.Cursor;
+                    size = subscriptionNames.Length;
+                } while (size >= 100 && pagination != null && subscriptionsv1.Length + subscriptionsv2.Length > 0);
 
-            await Subscribe(sender, "channel.raid", broadcasterId, async () => await _api.CreateChannelRaidEventSubscription("1", message.Session.Id, to: broadcasterId));
+                foreach (var subscription in subscriptionsv1)
+                    await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "1");
+                foreach (var subscription in subscriptionsv2)
+                    await Subscribe(sender, subscription, message.Session.Id, broadcasterId, "2");
+
+                await Subscribe(sender, "channel.raid", broadcasterId, async () => await _api.CreateChannelRaidEventSubscription("1", message.Session.Id, to: broadcasterId));
+            }
 
             sender.Identify(message.Session.Id);
         }
 
         private async Task Subscribe(TwitchWebsocketClient sender, string subscriptionName, string sessionId, string broadcasterId, string version)
         {
-            try
-            {
-                var response = await _api.CreateEventSubscription(subscriptionName, version, sessionId, broadcasterId);
-                if (response == null)
-                {
-                    return;
-                }
-                if (response.Data == null)
-                {
-                    _logger.Error($"Failed to create an event subscription [subscription type: {subscriptionName}][reason: data is null]");
-                    return;
-                }
-                if (!response.Data.Any())
-                {
-                    _logger.Error($"Failed to create an event subscription [subscription type: {subscriptionName}][reason: data is empty]");
-                    return;
-                }
-
-                foreach (var d in response.Data)
-                    sender.AddSubscription(broadcasterId, d.Type, d.Id);
-
-                _logger.Information($"Sucessfully added subscription to Twitch websockets [subscription type: {subscriptionName}]");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed to create an event subscription [subscription type: {subscriptionName}][reason: exception]");
-            }
+            await Subscribe(sender, subscriptionName, broadcasterId, async () => await _api.CreateEventSubscription(subscriptionName, version, sessionId, broadcasterId));
         }
 
         private async Task Subscribe(TwitchWebsocketClient sender, string subscriptionName, string broadcasterId, Func<Task<EventResponse<NotificationInfo>?>> subscribe)
