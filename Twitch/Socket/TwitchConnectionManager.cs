@@ -98,7 +98,7 @@ namespace TwitchChatTTS.Twitch.Socket
             if (reconnecting)
             {
                 var newClient = GetWorkingClient();
-                await newClient.Connect();
+                await newClient.Reconnect();
             }
         }
 

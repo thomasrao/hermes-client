@@ -122,6 +122,8 @@ namespace TwitchChatTTS.Twitch.Socket
             await ConnectAsync(URL);
         }
 
+        public async Task Reconnect() => await Reconnect(_backoff, async () => await Connect());
+
         public void Identify(string sessionId)
         {
             Identified = true;
