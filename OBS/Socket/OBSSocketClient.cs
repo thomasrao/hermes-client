@@ -84,7 +84,7 @@ namespace TwitchChatTTS.OBS.Socket
             _sourceIds.Clear();
         }
 
-        public async Task Connect()
+        public override async Task Connect()
         {
             if (string.IsNullOrWhiteSpace(URL))
             {

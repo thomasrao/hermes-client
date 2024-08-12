@@ -62,7 +62,7 @@ namespace TwitchChatTTS.Hermes.Socket
         }
 
 
-        public async Task Connect()
+        public override async Task Connect()
         {
             lock (_lock)
             {
@@ -263,7 +263,7 @@ namespace TwitchChatTTS.Hermes.Socket
                 _logger.Warning("Hermes websocket client disconnected.");
 
                 _heartbeatTimer.Enabled = false;
-                await Reconnect(_backoff, async () => await Connect());
+                await Reconnect(_backoff);
             };
         }
 

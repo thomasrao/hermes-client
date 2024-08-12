@@ -85,7 +85,7 @@ namespace TwitchChatTTS.Seven.Socket
                 URL = $"{SevenApiClient.WEBSOCKET_URL}@emote_set.*<object_id={_user.SevenEmoteSetId}>";
         }
 
-        public async Task Connect()
+        public override async Task Connect()
         {
             if (string.IsNullOrEmpty(URL))
             {
@@ -137,7 +137,7 @@ namespace TwitchChatTTS.Seven.Socket
 
             Task.Run(async () =>
             {
-                await Reconnect(_backoff, async () => await Connect());
+                await Reconnect(_backoff);
                 await Task.Delay(TimeSpan.FromMilliseconds(500));
 
                 if (Connected && ConnectionDetails?.SessionId != null)

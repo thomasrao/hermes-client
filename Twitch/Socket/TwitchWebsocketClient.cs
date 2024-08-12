@@ -111,7 +111,7 @@ namespace TwitchChatTTS.Twitch.Socket
             };
         }
 
-        public async Task Connect()
+        public override async Task Connect()
         {
             if (string.IsNullOrWhiteSpace(URL))
             {
@@ -123,7 +123,7 @@ namespace TwitchChatTTS.Twitch.Socket
             await ConnectAsync(URL);
         }
 
-        public async Task Reconnect() => await Reconnect(_backoff, async () => await Connect());
+        public async Task Reconnect() => await Reconnect(_backoff);
 
         public void Identify(string sessionId)
         {
