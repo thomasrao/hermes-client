@@ -1,8 +1,4 @@
-using System.Runtime.InteropServices;
-using System.Web;
 using Microsoft.Extensions.Hosting;
-using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 using Serilog;
 using TwitchChatTTS.Chat.Speech;
 
@@ -13,6 +9,8 @@ namespace TwitchChatTTS
         private readonly AudioPlaybackEngine _playback;
         private readonly TTSPlayer _player;
         private readonly ILogger _logger;
+
+        public CancellationTokenSource? PlayerSource;
 
 
         public TTSEngine(AudioPlaybackEngine playback, TTSPlayer player, ILogger logger)
@@ -27,6 +25,7 @@ namespace TwitchChatTTS
         {
             Task.Run(async () =>
             {
+                PlayerSource = new CancellationTokenSource();
                 while (true)
                 {
                     try
@@ -36,12 +35,21 @@ namespace TwitchChatTTS
                             _logger.Warning("TTS Engine - Cancellation requested.");
                             return;
                         }
-                        while (_player.IsEmpty() || _player.Playing != null)
+                        if (_player.IsEmpty())
                         {
-                            await Task.Delay(200, cancellationToken);
-                            continue;
+                            try
+                            {
+                                PlayerSource.Token.WaitHandle.WaitOne();
+                            }
+                            catch (Exception) { }
                         }
 
+                        while (_player.Playing != null)
+                        {
+                            await Task.Delay(100);
+                        }
+
+                        PlayerSource = new CancellationTokenSource();
                         var messageData = _player.ReceiveReady();
                         if (messageData == null)
                             continue;

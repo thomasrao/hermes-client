@@ -31,6 +31,7 @@ using TwitchChatTTS.Twitch.Socket.Handlers;
 using CommonSocketLibrary.Backoff;
 using TwitchChatTTS.Chat.Speech;
 using TwitchChatTTS.Chat.Messaging;
+using TwitchChatTTS.Chat.Observers;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -89,6 +90,9 @@ s.AddSingleton<TwitchApiClient>();
 
 s.AddSingleton<SevenApiClient>();
 s.AddSingleton<IEmoteDatabase, EmoteDatabase>();
+
+s.AddSingleton<TTSConsumer>();
+s.AddSingleton<TTSPublisher>();
 
 // OBS websocket
 s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("obs");
@@ -155,8 +159,10 @@ s.AddKeyedSingleton<IWebSocketHandler, RequestAckHandler>("hermes");
 s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, HermesMessageTypeManager>("hermes");
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, HermesSocketClient>("hermes");
 
-s.AddHostedService<TTS>();
+s.AddSingleton<TTSEngine>();
+
 s.AddHostedService<TTSListening>();
-s.AddHostedService<TTSEngine>();
+s.AddHostedService<TTSEngine>(p => p.GetRequiredService<TTSEngine>());
+s.AddHostedService<TTS>();
 using IHost host = builder.Build();
 await host.RunAsync();

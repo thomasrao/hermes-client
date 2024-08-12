@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using Serilog;
+using TwitchChatTTS.Chat.Observers;
 using TwitchChatTTS.Chat.Speech;
 
 namespace TwitchChatTTS
@@ -12,13 +13,17 @@ namespace TwitchChatTTS
     {
         private readonly AudioPlaybackEngine _playback;
         private readonly TTSPlayer _player;
+        private readonly TTSConsumer _consumer;
+        private readonly IDisposable _subscription;
         private readonly ILogger _logger;
 
 
-        public TTSListening(AudioPlaybackEngine playback, TTSPlayer player, ILogger logger)
+        public TTSListening(AudioPlaybackEngine playback, TTSPlayer player, TTSPublisher publisher, TTSConsumer consumer, ILogger logger)
         {
             _playback = playback;
             _player = player;
+            _consumer = consumer;
+            _subscription = publisher.Subscribe(consumer);
             _logger = logger;
         }
 
@@ -67,6 +72,7 @@ namespace TwitchChatTTS
 
         public Task StopAsync(CancellationToken cancellationToken)
         {
+            _subscription?.Dispose();
             return Task.CompletedTask;
         }
 
@@ -111,6 +117,7 @@ namespace TwitchChatTTS
                     var merged = new ConcatenatingSampleProvider(list);
                     group.Audio = merged;
                     _player.Ready(group);
+                    _consumer.OnNext(group);
                 });
         }
     }
