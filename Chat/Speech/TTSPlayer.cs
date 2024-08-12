@@ -1,6 +1,6 @@
 using NAudio.Wave;
 
-namespace TwitchChatTTS.Chat.Soeech
+namespace TwitchChatTTS.Chat.Speech
 {
     public class TTSPlayer
     {

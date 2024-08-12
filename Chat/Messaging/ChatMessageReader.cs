@@ -7,7 +7,7 @@ using TwitchChatTTS.Chat.Commands;
 using TwitchChatTTS.Chat.Emotes;
 using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Chat.Groups.Permissions;
-using TwitchChatTTS.Chat.Soeech;
+using TwitchChatTTS.Chat.Speech;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket;
 using TwitchChatTTS.Twitch.Socket;

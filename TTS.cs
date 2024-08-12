@@ -15,7 +15,7 @@ using TwitchChatTTS.Twitch.Socket.Messages;
 using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Chat.Commands;
 using System.Text;
-using TwitchChatTTS.Chat.Soeech;
+using TwitchChatTTS.Chat.Speech;
 using NAudio.Wave;
 
 namespace TwitchChatTTS
@@ -127,6 +127,14 @@ namespace TwitchChatTTS
                 return;
             }
 
+            _playback.AddOnMixerInputEnded((object? s, SampleProviderEventArgs e) =>
+            {
+                if (_player.Playing?.Audio == e.SampleProvider)
+                {
+                    _player.Playing = null;
+                }
+            });
+
             try
             {
                 await _twitch.Connect();
@@ -147,123 +155,15 @@ namespace TwitchChatTTS
             await InitializeEmotes(_sevenApiClient, emoteSet);
             await InitializeSevenTv();
             await InitializeObs();
-
-            _playback.AddOnMixerInputEnded((object? s, SampleProviderEventArgs e) =>
-            {
-                if (_player.Playing?.Audio == e.SampleProvider)
-                {
-                    _player.Playing = null;
-                }
-            });
-
-            Task.Run(async () =>
-            {
-                while (true)
-                {
-                    try
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                        {
-                            _logger.Warning("TTS Buffer - Cancellation requested.");
-                            return;
-                        }
-
-                        var group = _player.ReceiveBuffer();
-                        if (group == null)
-                        {
-                            await Task.Delay(200);
-                            continue;
-                        }
-
-                        Task.Run(() =>
-                        {
-                            var list = new List<ISampleProvider>();
-                            foreach (var message in group.Messages)
-                            {
-                                if (string.IsNullOrEmpty(message.Message))
-                                {
-                                    using (var reader2 = new AudioFileReader(message.File))
-                                    {
-                                        list.Add(_playback.ConvertSound(reader2.ToWaveProvider()));
-                                    }
-                                    continue;
-                                }
-
-                                try
-                                {
-                                    string url = $"https://api.streamelements.com/kappa/v2/speech?voice={message.Voice}&text={HttpUtility.UrlEncode(message.Message.Trim())}";
-                                    var nws = new NetworkWavSound(url);
-                                    var provider = new CachedWavProvider(nws);
-                                    var data = _playback.ConvertSound(provider);
-                                    var resampled = new WdlResamplingSampleProvider(data, _playback.SampleRate);
-                                    list.Add(resampled);
-                                }
-                                catch (Exception e)
-                                {
-                                    _logger.Error(e, "Failed to fetch TTS message for ");
-                                }
-                            }
-
-                            var merged = new ConcatenatingSampleProvider(list);
-                            group.Audio = merged;
-                            _player.Ready(group);
-                        });
-                    }
-                    catch (COMException e)
-                    {
-                        _logger.Error(e, "Failed to send request for TTS [HResult: " + e.HResult + "]");
-                    }
-                    catch (Exception e)
-                    {
-                        _logger.Error(e, "Failed to send request for TTS.");
-                    }
-                }
-            });
-
-            Task.Run(async () =>
-            {
-                while (true)
-                {
-                    try
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                        {
-                            _logger.Warning("TTS Queue - Cancellation requested.");
-                            return;
-                        }
-                        while (_player.IsEmpty() || _player.Playing != null)
-                        {
-                            await Task.Delay(200);
-                            continue;
-                        }
-                        var g = _player.ReceiveReady();
-                        if (g == null)
-                        {
-                            continue;
-                        }
-
-                        var audio = g.Audio;
-
-                        if (audio != null)
-                        {
-                            _player.Playing = g;
-                            _playback.AddMixerInput(audio);
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        _logger.Error(e, "Failed to play a TTS audio message");
-                    }
-                }
-            });
         }
 
-        public async Task StopAsync(CancellationToken cancellationToken)
+        public Task StopAsync(CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
                 _logger.Warning("Application has stopped due to cancellation token.");
             else
                 _logger.Warning("Application has stopped.");
+            return Task.CompletedTask;
         }
 
         private async Task InitializeHermesWebsocket()

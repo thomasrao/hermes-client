@@ -29,7 +29,7 @@ using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using TwitchChatTTS.Twitch.Socket.Handlers;
 using CommonSocketLibrary.Backoff;
-using TwitchChatTTS.Chat.Soeech;
+using TwitchChatTTS.Chat.Speech;
 using TwitchChatTTS.Chat.Messaging;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
@@ -156,5 +156,7 @@ s.AddKeyedSingleton<MessageTypeManager<IWebSocketHandler>, HermesMessageTypeMana
 s.AddKeyedSingleton<SocketClient<WebSocketMessage>, HermesSocketClient>("hermes");
 
 s.AddHostedService<TTS>();
+s.AddHostedService<TTSListening>();
+s.AddHostedService<TTSEngine>();
 using IHost host = builder.Build();
 await host.RunAsync();
