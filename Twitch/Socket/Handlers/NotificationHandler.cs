@@ -46,25 +46,28 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
 
         public async Task Execute(TwitchWebsocketClient sender, object data)
         {
-            if (sender == null)
-                return;
-            if (data is not NotificationMessage message)
-                return;
-
-            if (!_messageTypes.TryGetValue(message.Subscription.Type, out var type) || type == null)
+            Task.Run(async () =>
             {
-                _logger.Warning($"Could not find Twitch notification type [message type: {message.Subscription.Type}]");
-                return;
-            }
+                if (sender == null)
+                    return;
+                if (data is not NotificationMessage message)
+                    return;
 
-            if (!_handlers.TryGetValue(message.Subscription.Type, out ITwitchSocketHandler? handler) || handler == null)
-            {
-                _logger.Warning($"Could not find Twitch notification handler [message type: {message.Subscription.Type}]");
-                return;
-            }
+                if (!_messageTypes.TryGetValue(message.Subscription.Type, out var type) || type == null)
+                {
+                    _logger.Warning($"Could not find Twitch notification type [message type: {message.Subscription.Type}]");
+                    return;
+                }
 
-            var d = JsonSerializer.Deserialize(message.Event.ToString()!, type, _options);
-            await handler.Execute(sender, d);
+                if (!_handlers.TryGetValue(message.Subscription.Type, out ITwitchSocketHandler? handler) || handler == null)
+                {
+                    _logger.Warning($"Could not find Twitch notification handler [message type: {message.Subscription.Type}]");
+                    return;
+                }
+
+                var d = JsonSerializer.Deserialize(message.Event.ToString()!, type, _options);
+                Task.Run(async () => await handler.Execute(sender, d));
+            });
         }
     }
 }

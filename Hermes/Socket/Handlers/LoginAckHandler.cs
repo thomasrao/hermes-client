@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Socket.Data;
@@ -42,10 +43,22 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             _user.OwnerId = message.OwnerId;
             _user.DefaultTTSVoice = message.DefaultTTSVoice;
             _user.VoicesAvailable = message.TTSVoicesAvailable;
-            _user.RegexFilters = message.WordFilters.ToArray();
             _user.VoicesEnabled = new HashSet<string>(message.EnabledTTSVoices);
             _user.TwitchConnection = message.Connections.FirstOrDefault(c => c.Default && c.Type == "twitch");
             _user.NightbotConnection = message.Connections.FirstOrDefault(c => c.Default && c.Type == "nightbot");
+
+            var filters = message.WordFilters.Where(f => f.Search != null && f.Replace != null).ToArray();
+            foreach (var filter in filters)
+            {
+                try
+                {
+                    var re = new Regex(filter.Search!, RegexOptions.Compiled);
+                    re.Match(string.Empty);
+                    filter.Regex = re;
+                }
+                catch (Exception) { }
+            }
+            _user.RegexFilters = filters;
 
             client.LoggedIn = true;
             _logger.Information($"Logged in as {_user.TwitchUsername} {(message.WebLogin ? "via web" : "via TTS app")}.");
@@ -56,13 +69,14 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             await client.FetchRedemptions();
             await client.FetchPermissions();
 
-            if (_user.NightbotConnection != null) {
+            if (_user.NightbotConnection != null)
+            {
                 _nightbot.Initialize(_user.NightbotConnection.ClientId, _user.NightbotConnection.AccessToken);
-                var span = DateTime.Now - _user.NightbotConnection.ExpiresAt;
-                var timeLeft = span.TotalDays >= 2 ? Math.Floor(span.TotalDays) + " days" : (span.TotalHours >= 2 ? Math.Floor(span.TotalHours) + " hours" : Math.Floor(span.TotalMinutes) + " minutes");
-                if (span.TotalDays >= 3)
+                var span = _user.NightbotConnection.ExpiresAt - DateTime.Now;
+                var timeLeft = span.Days >= 2 ? span.Days + " days" : (span.Hours >= 2 ? span.Hours + " hours" : span.Minutes + " minutes");
+                if (span.Days >= 3)
                     _logger.Information($"Nightbot connection has {timeLeft} before it is revoked.");
-                else if (span.TotalMinutes >= 0)
+                else if (span.Minutes >= 0)
                     _logger.Warning($"Nightbot connection has {timeLeft} before it is revoked. Refreshing the token is soon required.");
                 else
                     _logger.Error("Nightbot connection has its permissions revoked. Refresh the token. Anything related to Nightbot from this application will not work.");

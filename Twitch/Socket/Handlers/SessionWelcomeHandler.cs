@@ -40,11 +40,11 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             }
 
             _api.Initialize(_user.TwitchConnection.ClientId, _user.TwitchConnection.AccessToken);
-            var span = DateTime.Now - _user.TwitchConnection.ExpiresAt;
-            var timeLeft = span.TotalDays >= 2 ? Math.Floor(span.TotalDays) + " days" : (span.TotalHours >= 2 ? Math.Floor(span.TotalHours) + " hours" : Math.Floor(span.TotalMinutes) + " minutes");
-            if (span.TotalDays >= 3)
+            var span = _user.TwitchConnection.ExpiresAt - DateTime.Now;
+            var timeLeft = span.Days >= 2 ? span.Days + " days" : (span.Hours >= 2 ? span.Hours + " hours" : span.Minutes + " minutes");
+            if (span.Days >= 3)
                 _logger.Information($"Twitch connection has {timeLeft} before it is revoked.");
-            else if (span.TotalMinutes >= 0)
+            else if (span.Minutes >= 0)
                 _logger.Warning($"Twitch connection has {timeLeft} before it is revoked. Refreshing the token is soon required.");
             else {
                 _logger.Error("Twitch connection has its permissions revoked. Refresh the token. Twith client will not be connecting.");

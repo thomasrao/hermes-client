@@ -55,7 +55,7 @@ namespace TwitchChatTTS.Twitch.Socket
             _messageTypes.Add("notification", typeof(NotificationMessage));
 
             UID = Guid.NewGuid().ToString("D");
-            
+
             if (_configuration.Environment == "PROD" || string.IsNullOrWhiteSpace(_configuration.Twitch?.WebsocketUrl))
                 URL = "wss://eventsub.wss.twitch.tv/ws";
             else
@@ -144,39 +144,42 @@ namespace TwitchChatTTS.Twitch.Socket
             };
         }
 
-        protected override async Task OnResponseReceived(TwitchWebsocketMessage? message)
+        protected override Task OnResponseReceived(TwitchWebsocketMessage? message)
         {
-            if (message == null || message.Metadata == null)
+            return Task.Run(async () =>
             {
-                _logger.Information("Twitch message is null");
-                return;
-            }
+                if (message == null || message.Metadata == null)
+                {
+                    _logger.Information("Twitch message is null");
+                    return;
+                }
 
-            _lastReceivedMessageTimestamp = DateTime.UtcNow;
+                _lastReceivedMessageTimestamp = DateTime.UtcNow;
 
-            string content = message.Payload?.ToString() ?? string.Empty;
-            if (message.Metadata.MessageType != "session_keepalive")
-                _logger.Debug("Twitch RX #" + message.Metadata.MessageType + ": " + content);
+                string content = message.Payload?.ToString() ?? string.Empty;
+                if (message.Metadata.MessageType != "session_keepalive")
+                    _logger.Debug("Twitch RX #" + message.Metadata.MessageType + ": " + content);
 
-            if (!_messageTypes.TryGetValue(message.Metadata.MessageType, out var type) || type == null)
-            {
-                _logger.Debug($"Could not find Twitch message type [message type: {message.Metadata.MessageType}]");
-                return;
-            }
+                if (!_messageTypes.TryGetValue(message.Metadata.MessageType, out var type) || type == null)
+                {
+                    _logger.Debug($"Could not find Twitch message type [message type: {message.Metadata.MessageType}]");
+                    return;
+                }
 
-            if (!_handlers.TryGetValue(message.Metadata.MessageType, out ITwitchSocketHandler? handler) || handler == null)
-            {
-                _logger.Debug($"Could not find Twitch handler [message type: {message.Metadata.MessageType}]");
-                return;
-            }
+                if (!_handlers.TryGetValue(message.Metadata.MessageType, out ITwitchSocketHandler? handler) || handler == null)
+                {
+                    _logger.Debug($"Could not find Twitch handler [message type: {message.Metadata.MessageType}]");
+                    return;
+                }
 
-            var data = JsonSerializer.Deserialize(content, type, _options);
-            if (data == null)
-            {
-                _logger.Warning("Twitch websocket message payload is null.");
-                return;
-            }
-            await Task.Run(async () => await handler.Execute(this, data));
+                var data = JsonSerializer.Deserialize(content, type, _options);
+                if (data == null)
+                {
+                    _logger.Warning("Twitch websocket message payload is null.");
+                    return;
+                }
+                await handler.Execute(this, data);
+            });
         }
 
         public async Task Send<T>(string type, T data)

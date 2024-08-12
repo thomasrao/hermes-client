@@ -9,7 +9,6 @@ namespace TwitchChatTTS.Chat.Soeech
         private readonly Mutex _mutex;
         private readonly Mutex _mutex2;
 
-        //public TTSGroupedMessage? PlayingGroup { get; set; }
         public TTSGroupedMessage? Playing { get; set; }
 
         public TTSPlayer()
@@ -200,7 +199,6 @@ namespace TwitchChatTTS.Chat.Soeech
         public DateTime Timestamp { get; set; }
         public int Priority { get; set; }
         public IList<TTSMessage> Messages { get; set; }
-        //public IList<ISampleProvider> Audios { get; set; }
         public ISampleProvider? Audio { get; set; }
 
 
@@ -212,7 +210,6 @@ namespace TwitchChatTTS.Chat.Soeech
             Messages = messages;
             Timestamp = timestamp;
             Priority = priority;
-            //Audios = new List<ISampleProvider>();
         }
     }
 }
