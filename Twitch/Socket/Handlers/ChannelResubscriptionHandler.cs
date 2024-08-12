@@ -24,8 +24,13 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
         {
             if (data is not ChannelResubscriptionMessage message)
                 return;
+            
+            _logger.Debug($"Resubscription occured [chatter: {message.UserLogin}][chatter id: {message.UserId}][tier: {message.Tier}][streak: {message.StreakMonths}][cumulative: {message.CumulativeMonths}][duration: {message.DurationMonths}]");
 
-            _logger.Debug($"Resubscription occured [chatter: {message.UserLogin}][chatter id: {message.UserId}][Tier: {message.Tier}][Streak: {message.StreakMonths}][Cumulative: {message.CumulativeMonths}][Duration: {message.DurationMonths}]");
+            long broadcasterId = long.Parse(message.BroadcasterUserId);
+            long chatterId = message.UserId == null ? 0 : long.Parse(message.UserId);
+            Task.Run(async () => await _reader.Read(sender, broadcasterId, chatterId, message.UserLogin, null, null, message.Message.Fragments, 100));
+
             try
             {
                 var actions = _redemptionManager.Get("subscription");

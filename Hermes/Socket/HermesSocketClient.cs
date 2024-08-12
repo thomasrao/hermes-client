@@ -215,6 +215,15 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
+        public async Task FetchConnections()
+        {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_connections",
+                Data = null
+            });
+        }
+
         public void Initialize()
         {
             _logger.Information("Initializing Hermes websocket client.");

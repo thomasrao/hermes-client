@@ -8,7 +8,7 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
         {
         }
 
-        public override bool Validate(string value, ChannelChatMessage message)
+        public override bool Validate(string value, TwitchChatFragment[] fragments)
         {
             return true;
         }

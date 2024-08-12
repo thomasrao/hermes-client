@@ -8,9 +8,9 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
         {
         }
 
-        public override bool Validate(string value, ChannelChatMessage message)
+        public override bool Validate(string value, TwitchChatFragment[] fragments)
         {
-            return value.StartsWith('@') && message.Message.Fragments.Any(f => f.Text == value && f.Mention != null);
+            return value.StartsWith('@') && fragments.Any(f => f.Text == value && f.Mention != null);
         }
     }
 }

@@ -13,7 +13,7 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
             _user = user;
         }
 
-        public override bool Validate(string value, ChannelChatMessage message)
+        public override bool Validate(string value, TwitchChatFragment[] fragments)
         {
             if (_user.VoicesAvailable == null)
                 return false;

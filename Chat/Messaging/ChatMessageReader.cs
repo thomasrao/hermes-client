@@ -3,10 +3,7 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using TwitchChatTTS.Chat.Commands;
 using TwitchChatTTS.Chat.Emotes;
-using TwitchChatTTS.Chat.Groups;
-using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Chat.Speech;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket;
@@ -17,13 +14,8 @@ namespace TwitchChatTTS.Chat.Messaging
 {
     public class ChatMessageReader
     {
-        public string Name => "channel.chat.message";
-
         private readonly User _user;
         private readonly TTSPlayer _player;
-        private readonly ICommandManager _commands;
-        private readonly IGroupPermissionManager _permissionManager;
-        private readonly IChatterGroupManager _chatterGroupManager;
         private readonly IEmoteDatabase _emotes;
         private readonly OBSSocketClient _obs;
         private readonly HermesSocketClient _hermes;
@@ -36,9 +28,6 @@ namespace TwitchChatTTS.Chat.Messaging
         public ChatMessageReader(
             User user,
             TTSPlayer player,
-            ICommandManager commands,
-            IGroupPermissionManager permissionManager,
-            IChatterGroupManager chatterGroupManager,
             IEmoteDatabase emotes,
             [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
             [FromKeyedServices("obs")] SocketClient<WebSocketMessage> obs,
@@ -48,9 +37,6 @@ namespace TwitchChatTTS.Chat.Messaging
         {
             _user = user;
             _player = player;
-            _commands = commands;
-            _permissionManager = permissionManager;
-            _chatterGroupManager = chatterGroupManager;
             _emotes = emotes;
             _obs = (obs as OBSSocketClient)!;
             _hermes = (hermes as HermesSocketClient)!;
@@ -61,62 +47,46 @@ namespace TwitchChatTTS.Chat.Messaging
             _logger = logger;
         }
 
-        public async Task Execute(TwitchWebsocketClient sender, ChannelChatMessage message)
+        public async Task Read(TwitchWebsocketClient sender, long broadcasterId, long? chatterId, string? chatterLogin, string? messageId, TwitchReplyInfo? reply, TwitchChatFragment[] fragments, int priority)
         {
             if (_hermes.Connected && !_hermes.Ready)
             {
-                _logger.Debug($"TTS is not yet ready. Ignoring chat messages [message id: {message.MessageId}]");
-                return; // new MessageResult(MessageStatus.NotReady, -1, -1);
+                _logger.Debug($"TTS is not yet ready. Ignoring chat messages [message id: {messageId}]");
+                return;
             }
             if (_configuration.Twitch?.TtsWhenOffline != true && !_obs.Streaming)
             {
-                _logger.Debug($"OBS is not streaming. Ignoring chat messages [message id: {message.MessageId}]");
-                return; // new MessageResult(MessageStatus.NotReady, -1, -1);
-            }
-
-            var chatterId = long.Parse(message.ChatterUserId);
-            var broadcasterId = long.Parse(message.BroadcasterUserId);
-            var messageId = message.MessageId;
-            var groups = GetGroups(message, chatterId);
-            var commandResult = await CheckForChatCommand(message.Message.Text, message, groups);
-            if (commandResult != ChatCommandResult.Unknown)
-                return;
-
-            var bits = GetTotalBits(message);
-            if (!HasPermission(message, chatterId, groups, bits))
-            {
-                _logger.Debug($"Blocked message by {message.ChatterUserLogin}: {message.Message.Text}");
+                _logger.Debug($"OBS is not streaming. Ignoring chat messages [message id: {messageId}]");
                 return;
             }
 
-            var emoteUsage = GetEmoteUsage(message);
+            var emoteUsage = GetEmoteUsage(fragments);
             var tasks = new List<Task>();
             if (_obs.Streaming)
             {
                 if (emoteUsage.NewEmotes.Any())
                     tasks.Add(_hermes.SendEmoteDetails(emoteUsage.NewEmotes));
-                if (emoteUsage.EmotesUsed.Any())
-                    tasks.Add(_hermes.SendEmoteUsage(message.MessageId, chatterId, emoteUsage.EmotesUsed));
-                if (!_user.Chatters.Contains(chatterId))
+                if (emoteUsage.EmotesUsed.Any() && messageId != null && chatterId != null)
+                    tasks.Add(_hermes.SendEmoteUsage(messageId, chatterId.Value, emoteUsage.EmotesUsed));
+                if (!string.IsNullOrEmpty(chatterLogin) && chatterId != null && !_user.Chatters.Contains(chatterId.Value))
                 {
-                    tasks.Add(_hermes.SendChatterDetails(chatterId, message.ChatterUserLogin));
-                    _user.Chatters.Add(chatterId);
+                    tasks.Add(_hermes.SendChatterDetails(chatterId.Value, chatterLogin));
+                    _user.Chatters.Add(chatterId.Value);
                 }
             }
 
-            if (_user.Raids.TryGetValue(message.BroadcasterUserId, out var raid) && !raid.Chatters.Contains(chatterId))
+            if (chatterId != null && _user.Raids.TryGetValue(broadcasterId.ToString(), out var raid) && !raid.Chatters.Contains(chatterId.Value))
             {
-                _logger.Information($"Potential chat message from raider ignored due to potential raid message spam [chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
+                _logger.Information($"Potential chat message from raider ignored due to potential raid message spam [chatter: {chatterLogin}][chatter id: {chatterId}]");
                 return;
             }
 
-            var msg = FilterMessage(message);
-            int priority = _chatterGroupManager.GetPriorityFor(groups);
-            string voiceSelected = GetSelectedVoiceFor(chatterId);
+            var msg = FilterMessage(fragments, reply);
+            string voiceSelected = chatterId == null ? _user.DefaultTTSVoice : GetSelectedVoiceFor(chatterId.Value);
             var messages = GetPartialTTSMessages(msg, voiceSelected).ToList();
             var groupedMessage = new TTSGroupedMessage(broadcasterId, chatterId, messageId, messages, DateTime.UtcNow, priority);
             _player.Add(groupedMessage, groupedMessage.Priority);
-            
+
             if (tasks.Any())
                 await Task.WhenAll(tasks);
         }
@@ -175,25 +145,11 @@ namespace TwitchChatTTS.Chat.Messaging
             return list;
         }
 
-        private async Task<ChatCommandResult> CheckForChatCommand(string arguments, ChannelChatMessage message, IEnumerable<string> groups)
+        private string FilterMessage(TwitchChatFragment[] fragments, TwitchReplyInfo? reply)
         {
-            try
-            {
-                var commandResult = await _commands.Execute(arguments, message, groups);
-                return commandResult;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed executing a chat command [message: {arguments}][chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}][message id: {message.MessageId}]");
-            }
-            return ChatCommandResult.Fail;
-        }
-
-        private string FilterMessage(ChannelChatMessage message)
-        {
-            var msg = string.Join(string.Empty, message.Message.Fragments.Where(f => f.Type != "cheermote").Select(f => f.Text)).Trim();
-            if (message.Reply != null)
-                msg = msg.Substring(message.Reply.ParentUserLogin.Length + 2);
+            var msg = string.Join(string.Empty, fragments.Where(f => f.Type != "cheermote").Select(f => f.Text)).Trim();
+            if (reply != null)
+                msg = msg.Substring(reply.ParentUserLogin.Length + 2);
 
             // Replace filtered words.
             if (_user.RegexFilters != null)
@@ -222,11 +178,11 @@ namespace TwitchChatTTS.Chat.Messaging
             return msg;
         }
 
-        private ChatMessageEmoteUsage GetEmoteUsage(ChannelChatMessage message)
+        private ChatMessageEmoteUsage GetEmoteUsage(TwitchChatFragment[] fragments)
         {
             var emotesUsed = new HashSet<string>();
             var newEmotes = new Dictionary<string, string>();
-            foreach (var fragment in message.Message.Fragments)
+            foreach (var fragment in fragments)
             {
                 if (fragment.Emote != null)
                 {
@@ -254,30 +210,6 @@ namespace TwitchChatTTS.Chat.Messaging
                 }
             }
             return new ChatMessageEmoteUsage(emotesUsed, newEmotes);
-        }
-
-        private int GetTotalBits(ChannelChatMessage message)
-        {
-            return message.Message.Fragments.Where(f => f.Type == "cheermote" && f.Cheermote != null)
-                .Select(f => f.Cheermote!.Bits)
-                .Sum();
-        }
-
-        private string GetGroupNameByBadgeName(string badgeName)
-        {
-            if (badgeName == "subscriber")
-                return "subscribers";
-            if (badgeName == "moderator")
-                return "moderators";
-            return badgeName.ToLower();
-        }
-
-        private IEnumerable<string> GetGroups(ChannelChatMessage message, long chatterId)
-        {
-            var defaultGroups = new string[] { "everyone" };
-            var badgesGroups = message.Badges.Select(b => b.SetId).Select(GetGroupNameByBadgeName);
-            var customGroups = _chatterGroupManager.GetGroupNamesFor(chatterId);
-            return defaultGroups.Union(badgesGroups).Union(customGroups);
         }
 
         private IEnumerable<TTSMessage> GetPartialTTSMessages(string message, string defaultVoice)
@@ -317,17 +249,6 @@ namespace TwitchChatTTS.Chat.Messaging
                 }
             }
             return voiceSelected ?? "Brian";
-        }
-
-        private bool HasPermission(ChannelChatMessage message, long chatterId, IEnumerable<string> groups, int bits)
-        {
-            var permissionPath = "tts.chat.messages.read";
-            if (!string.IsNullOrWhiteSpace(message.ChannelPointsCustomRewardId))
-                permissionPath = "tts.chat.redemptions.read";
-            else if (bits > 0)
-                permissionPath = "tts.chat.bits.read";
-
-            return chatterId == _user.OwnerId ? true : _permissionManager.CheckIfAllowed(groups, permissionPath) == true;
         }
 
         private class ChatMessageEmoteUsage

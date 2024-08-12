@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.OBS.Socket;
-using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
 using static TwitchChatTTS.Chat.Commands.TTSCommands;
 
@@ -37,7 +36,8 @@ namespace TwitchChatTTS.Chat.Commands
                     .CreateStaticInputParameter("default_voice", b => b.CreateCommand(new RefreshTTSDefaultVoice()))
                     .CreateStaticInputParameter("redemptions", b => b.CreateCommand(new RefreshRedemptions()))
                     .CreateStaticInputParameter("obs_cache", b => b.CreateCommand(new RefreshObs(_obs, _logger)))
-                    .CreateStaticInputParameter("permissions", b => b.CreateCommand(new RefreshPermissions()));
+                    .CreateStaticInputParameter("permissions", b => b.CreateCommand(new RefreshPermissions()))
+                    .CreateStaticInputParameter("connections", b => b.CreateCommand(new RefreshConnections()));
             });
         }
 
@@ -113,12 +113,21 @@ namespace TwitchChatTTS.Chat.Commands
 
         private sealed class RefreshPermissions : IChatPartialCommand
         {
-
             public bool AcceptCustomPermission { get => true; }
 
             public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
             {
                 await hermes.FetchPermissions();
+            }
+        }
+
+        private sealed class RefreshConnections : IChatPartialCommand
+        {
+            public bool AcceptCustomPermission { get => true; }
+
+            public async Task Execute(IDictionary<string, string> values, ChannelChatMessage message, HermesSocketClient hermes)
+            {
+                await hermes.FetchConnections();
             }
         }
     }

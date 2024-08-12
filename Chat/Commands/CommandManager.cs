@@ -59,7 +59,7 @@ namespace TwitchChatTTS.Chat.Commands
             string[] args = parts.ToArray();
             string com = args.First().ToLower();
 
-            CommandSelectorResult selectorResult = _commandSelector.GetBestMatch(args, message);
+            CommandSelectorResult selectorResult = _commandSelector.GetBestMatch(args, message.Message.Fragments);
             if (selectorResult.Command == null)
             {
                 _logger.Warning($"Could not match '{arg}' to any command [chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
@@ -86,7 +86,7 @@ namespace TwitchChatTTS.Chat.Commands
                 var parameter = entry.Value;
                 var argument = entry.Key;
                 // Optional parameters were validated while fetching this command.
-                if (!parameter.Optional && !parameter.Validate(argument, message))
+                if (!parameter.Optional && !parameter.Validate(argument, message.Message.Fragments))
                 {
                     _logger.Warning($"Command failed due to an argument being invalid [argument name: {parameter.Name}][argument value: {argument}][arguments: {arg}][command type: {command.GetType().Name}][chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
                     return ChatCommandResult.Syntax;

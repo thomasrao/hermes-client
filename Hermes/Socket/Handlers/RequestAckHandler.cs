@@ -19,6 +19,8 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
     {
         private User _user;
         private readonly ICallbackManager<HermesRequestData> _callbackManager;
+        private readonly TwitchApiClient _twitch;
+        private readonly NightbotApiClient _nightbot;
         private readonly IServiceProvider _serviceProvider;
         private readonly JsonSerializerOptions _options;
         private readonly ILogger _logger;
@@ -30,6 +32,8 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
         public RequestAckHandler(
             ICallbackManager<HermesRequestData> callbackManager,
+            TwitchApiClient twitch,
+            NightbotApiClient nightbot,
             IServiceProvider serviceProvider,
             User user,
             JsonSerializerOptions options,
@@ -37,6 +41,8 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         )
         {
             _callbackManager = callbackManager;
+            _twitch = twitch;
+            _nightbot = nightbot;
             _serviceProvider = serviceProvider;
             _user = user;
             _options = options;
@@ -141,6 +147,26 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
                 _user.VoicesAvailable[voiceId] = voice;
                 _logger.Information($"Updated TTS voice [voice: {voice}][id: {voiceId}]");
+            }
+            else if (message.Request.Type == "get_connections")
+            {
+                var connections = JsonSerializer.Deserialize<IEnumerable<Connection>>(message.Data?.ToString(), _options);
+                if (connections == null)
+                {
+                    _logger.Error("Null value was given when attempting to fetch connections.");
+                    _logger.Debug(message.Data?.ToString());
+                    return;
+                }
+
+                _user.TwitchConnection = connections.FirstOrDefault(c => c.Type == "twitch" && c.Default);
+                _user.NightbotConnection = connections.FirstOrDefault(c => c.Type == "nightbot" && c.Default);
+
+                if (_user.TwitchConnection != null)
+                    _twitch.Initialize(_user.TwitchConnection.ClientId, _user.TwitchConnection.AccessToken);
+                if (_user.NightbotConnection != null)
+                    _nightbot.Initialize(_user.NightbotConnection.ClientId, _user.NightbotConnection.AccessToken);
+
+                _logger.Information($"Fetched connections from TTS account [count: {connections.Count()}][twitch: {_user.TwitchConnection != null}][nightbot: {_user.NightbotConnection != null}]");
             }
             else if (message.Request.Type == "get_tts_users")
             {

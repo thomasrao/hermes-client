@@ -13,7 +13,7 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
             _value = value.ToLower();
         }
 
-        public override bool Validate(string value, ChannelChatMessage message)
+        public override bool Validate(string value, TwitchChatFragment[] fragments)
         {
             return _value == value.ToLower();
         }

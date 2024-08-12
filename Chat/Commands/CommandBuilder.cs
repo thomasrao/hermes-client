@@ -37,7 +37,8 @@ namespace TwitchChatTTS.Chat.Commands
                 _logger = logger;
 
                 _stack = new Stack<CommandNode>();
-                Clear();
+                _root = new CommandNode(new StaticParameter("root", "root"));
+                _current = _root;
             }
 
 
@@ -201,7 +202,7 @@ namespace TwitchChatTTS.Chat.Commands
 
         public interface ICommandSelector
         {
-            CommandSelectorResult GetBestMatch(string[] args, ChannelChatMessage message);
+            CommandSelectorResult GetBestMatch(string[] args, TwitchChatFragment[] fragments);
             IDictionary<string, CommandParameter> GetNonStaticArguments(string[] args, string path);
         }
 
@@ -214,12 +215,12 @@ namespace TwitchChatTTS.Chat.Commands
                 _root = root;
             }
 
-            public CommandSelectorResult GetBestMatch(string[] args, ChannelChatMessage message)
+            public CommandSelectorResult GetBestMatch(string[] args, TwitchChatFragment[] fragments)
             {
-                return GetBestMatch(_root, message, args, null, string.Empty, null);
+                return GetBestMatch(_root, fragments, args, null, string.Empty, null);
             }
 
-            private CommandSelectorResult GetBestMatch(CommandNode node, ChannelChatMessage message, IEnumerable<string> args, IChatPartialCommand? match, string path, string[]? permissions)
+            private CommandSelectorResult GetBestMatch(CommandNode node, TwitchChatFragment[] fragments, IEnumerable<string> args, IChatPartialCommand? match, string path, string[]? permissions)
             {
                 if (node == null || !args.Any())
                     return new CommandSelectorResult(match, path, permissions);
@@ -234,13 +235,13 @@ namespace TwitchChatTTS.Chat.Commands
                     if (child.Parameter.GetType() == typeof(StaticParameter))
                     {
                         if (child.Parameter.Name.ToLower() == argumentLower)
-                            return GetBestMatch(child, message, args.Skip(1), child.Command ?? match, (path.Length == 0 ? string.Empty : path + ".") + child.Parameter.Name.ToLower(), perms);
+                            return GetBestMatch(child, fragments, args.Skip(1), child.Command ?? match, (path.Length == 0 ? string.Empty : path + ".") + child.Parameter.Name.ToLower(), perms);
                         continue;
                     }
-                    if ((!child.Parameter.Optional || child.Parameter.Validate(argument, message)) && child.Command != null)
-                        return GetBestMatch(child, message, args.Skip(1), child.Command, (path.Length == 0 ? string.Empty : path + ".") + "*", perms);
+                    if ((!child.Parameter.Optional || child.Parameter.Validate(argument, fragments)) && child.Command != null)
+                        return GetBestMatch(child, fragments, args.Skip(1), child.Command, (path.Length == 0 ? string.Empty : path + ".") + "*", perms);
                     if (!child.Parameter.Optional)
-                        return GetBestMatch(child, message, args.Skip(1), match, (path.Length == 0 ? string.Empty : path + ".") + "*", permissions);
+                        return GetBestMatch(child, fragments, args.Skip(1), match, (path.Length == 0 ? string.Empty : path + ".") + "*", permissions);
                 }
 
                 return new CommandSelectorResult(match, path, permissions);

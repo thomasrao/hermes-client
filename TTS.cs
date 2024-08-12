@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-using System.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -16,7 +14,6 @@ using TwitchChatTTS.Twitch.Socket;
 using TwitchChatTTS.Chat.Commands;
 using System.Text;
 using TwitchChatTTS.Chat.Speech;
-using NAudio.Wave;
 
 namespace TwitchChatTTS
 {
@@ -95,7 +92,7 @@ namespace TwitchChatTTS
                 _logger.Information($"A new update for TTS is avaiable! Version {hermesVersion.MajorVersion}.{hermesVersion.MinorVersion} is available at {hermesVersion.Download}");
                 var changes = hermesVersion.Changelog.Split("\n");
                 if (changes != null && changes.Any())
-                    _logger.Information("Changelogs:\n  - " + string.Join("\n  - ", changes) + "\n\n");
+                    _logger.Information("Changelog:\n  - " + string.Join("\n  - ", changes) + "\n\n");
                 await Task.Delay(15 * 1000);
             }
 

@@ -194,15 +194,15 @@ namespace TwitchChatTTS.Chat.Speech
     public class TTSGroupedMessage
     {
         public long RoomId { get; set; }
-        public long ChatterId { get; set; }
-        public string MessageId { get; set; }
+        public long? ChatterId { get; set; }
+        public string? MessageId { get; set; }
         public DateTime Timestamp { get; set; }
         public int Priority { get; set; }
         public IList<TTSMessage> Messages { get; set; }
         public ISampleProvider? Audio { get; set; }
 
 
-        public TTSGroupedMessage(long broadcasterId, long chatterId, string messageId, IList<TTSMessage> messages, DateTime timestamp, int priority)
+        public TTSGroupedMessage(long broadcasterId, long? chatterId, string? messageId, IList<TTSMessage> messages, DateTime timestamp, int priority)
         {
             RoomId = broadcasterId;
             ChatterId = chatterId;

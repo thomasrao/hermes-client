@@ -13,6 +13,6 @@ namespace TwitchChatTTS.Chat.Commands.Parameters
             Optional = optional;
         }
 
-        public abstract bool Validate(string value, ChannelChatMessage message);
+        public abstract bool Validate(string value, TwitchChatFragment[] fragments);
     }
 }
