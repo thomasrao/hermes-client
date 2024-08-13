@@ -30,7 +30,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             };
 
             _messageTypes = new Dictionary<string, Type>();
-            _messageTypes.Add("channel.adbreak.begin", typeof(ChannelAdBreakMessage));
+            _messageTypes.Add("channel.ad_break.begin", typeof(ChannelAdBreakMessage));
             _messageTypes.Add("channel.ban", typeof(ChannelBanMessage));
             _messageTypes.Add("channel.chat.message", typeof(ChannelChatMessage));
             _messageTypes.Add("channel.chat.clear", typeof(ChannelChatClearMessage));
