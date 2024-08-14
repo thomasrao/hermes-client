@@ -30,7 +30,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
 
             if (!_user.Raids.ContainsKey(message.ToBroadcasterUserId))
             {
-                chatters = await _api.GetChatters(_user.TwitchUserId.ToString(), _user.TwitchUserId.ToString());
+                chatters = await _api.GetChatters(message.ToBroadcasterUserId.ToString(), _user.TwitchUserId.ToString());
                 if (chatters?.Data == null)
                 {
                     var extraErrorInfo = _user.TwitchUserId.ToString() != message.ToBroadcasterUserId ? " Ensure you have moderator status in your joined channel(s) to prevent raid spam." : string.Empty;
