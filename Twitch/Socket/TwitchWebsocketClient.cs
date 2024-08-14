@@ -17,7 +17,6 @@ namespace TwitchChatTTS.Twitch.Socket
         private readonly IDictionary<string, string> _subscriptions;
         private readonly IBackoff _backoff;
         private readonly Configuration _configuration;
-        private DateTime _lastReceivedMessageTimestamp;
         private bool _disconnected;
         private readonly object _lock;
 
@@ -156,8 +155,6 @@ namespace TwitchChatTTS.Twitch.Socket
                     _logger.Information("Twitch message is null");
                     return;
                 }
-
-                _lastReceivedMessageTimestamp = DateTime.UtcNow;
 
                 string content = message.Payload?.ToString() ?? string.Empty;
                 if (message.Metadata.MessageType != "session_keepalive")

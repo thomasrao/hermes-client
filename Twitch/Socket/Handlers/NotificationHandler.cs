@@ -44,9 +44,9 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _messageTypes.Add("channel.subscription.gift", typeof(ChannelSubscriptionGiftMessage));
         }
 
-        public async Task Execute(TwitchWebsocketClient sender, object data)
+        public Task Execute(TwitchWebsocketClient sender, object data)
         {
-            Task.Run(async () =>
+            return Task.Run(() =>
             {
                 if (sender == null)
                     return;
@@ -66,6 +66,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 }
 
                 var d = JsonSerializer.Deserialize(message.Event.ToString()!, type, _options);
+                ArgumentNullException.ThrowIfNull(d);
                 Task.Run(async () => await handler.Execute(sender, d));
             });
         }

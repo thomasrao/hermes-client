@@ -110,7 +110,7 @@ namespace TwitchChatTTS
                         }
                         catch (Exception e)
                         {
-                            _logger.Error(e, "Failed to fetch TTS message for ");
+                            _logger.Error(e, $"Failed to fetch TTS message [message: {message.Message.Trim()}][chatter id: {group.ChatterId}].");
                         }
                     }
 

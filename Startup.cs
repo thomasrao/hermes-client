@@ -32,6 +32,7 @@ using CommonSocketLibrary.Backoff;
 using TwitchChatTTS.Chat.Speech;
 using TwitchChatTTS.Chat.Messaging;
 using TwitchChatTTS.Chat.Observers;
+using TwitchChatTTS.Chat.Commands.Limits;
 
 // dotnet publish -r linux-x64 -p:PublishSingleFile=true --self-contained true
 // dotnet publish -r win-x64 -p:PublishSingleFile=true --self-contained true
@@ -85,7 +86,6 @@ s.AddSingleton<ICommandManager, CommandManager>();
 s.AddSingleton<TTSPlayer>();
 s.AddSingleton<IRedemptionManager, RedemptionManager>();
 s.AddSingleton<HermesApiClient>();
-s.AddSingleton<TwitchBotAuth>();
 s.AddSingleton<TwitchApiClient>();
 
 s.AddSingleton<SevenApiClient>();
@@ -93,6 +93,8 @@ s.AddSingleton<IEmoteDatabase, EmoteDatabase>();
 
 s.AddSingleton<TTSConsumer>();
 s.AddSingleton<TTSPublisher>();
+
+s.AddSingleton<ChatMessageReader>();
 
 // OBS websocket
 s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("obs");
@@ -117,8 +119,6 @@ s.AddKeyedSingleton<SocketClient<WebSocketMessage>, SevenSocketClient>("7tv");
 
 // Nightbot
 s.AddSingleton<NightbotApiClient>();
-
-s.AddSingleton<ChatMessageReader>();
 
 // twitch websocket
 s.AddKeyedSingleton<IBackoff>("twitch", new ExponentialBackoff(1000, 120 * 1000));

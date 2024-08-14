@@ -78,21 +78,19 @@ namespace TwitchChatTTS.Twitch.Socket
             {
                 if (_identified?.UID == client.UID)
                 {
-                    _logger.Warning($"Identified Twitch client has disconnected [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
+                    _logger.Debug($"Identified Twitch client has disconnected [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
                     _identified = null;
                     reconnecting = true;
                 }
                 else if (_backup?.UID == client.UID)
                 {
-                    _logger.Warning($"Backup Twitch client has disconnected [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
+                    _logger.Debug($"Backup Twitch client has disconnected [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
                     _backup = null;
                 }
                 else if (client.ReceivedReconnecting)
-                {
                     _logger.Debug($"Twitch client disconnected due to reconnection [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
-                }
                 else
-                    _logger.Error($"Twitch client disconnected from unknown source [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
+                    _logger.Warning($"Twitch client disconnected from unknown source [client: {client.UID}][main: {_identified?.UID}][backup: {_backup?.UID}]");
             }
 
             if (reconnecting)
@@ -111,7 +109,7 @@ namespace TwitchChatTTS.Twitch.Socket
                 {
                     if (_backup != null && _backup.UID == client.UID)
                     {
-                        _logger.Information($"Twitch client has been identified [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
+                        _logger.Debug($"Twitch client has been identified [client: {client.UID}][main: {_identified?.UID}][backup: {_backup.UID}]");
                         _identified = _backup;
                         _backup = null;
                     }
@@ -120,7 +118,7 @@ namespace TwitchChatTTS.Twitch.Socket
                 }
                 else if (_identified.UID == client.UID)
                 {
-                    _logger.Warning($"Twitch client has been re-identified [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
+                    _logger.Debug($"Twitch client has been re-identified [client: {client.UID}][main: {_identified.UID}][backup: {_backup?.UID}]");
                 }
                 else if (_backup == null || _backup.UID != client.UID)
                 {
