@@ -10,6 +10,6 @@ namespace TwitchChatTTS.Twitch.Socket.Messages
     }
 
     public class EventResponsePagination {
-        public string Cursor { get; set; }
+        public string? Cursor { get; set; }
     }
 }
