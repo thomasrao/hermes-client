@@ -9,5 +9,6 @@ namespace TwitchChatTTS.Chat.Commands
         Syntax = 4,
         Fail = 5,
         OtherRoom = 6,
+        RateLimited = 7
     }
 }

@@ -6,8 +6,10 @@ using CommonSocketLibrary.Common;
 using HermesSocketLibrary.Requests.Callbacks;
 using HermesSocketLibrary.Requests.Messages;
 using HermesSocketLibrary.Socket.Data;
+using HermesSocketServer.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using TwitchChatTTS.Chat.Commands.Limits;
 using TwitchChatTTS.Chat.Emotes;
 using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Chat.Groups.Permissions;
@@ -19,6 +21,8 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
     {
         private User _user;
         private readonly ICallbackManager<HermesRequestData> _callbackManager;
+        private readonly IChatterGroupManager _groups;
+        private readonly IUsagePolicy<long> _policies;
         private readonly TwitchApiClient _twitch;
         private readonly NightbotApiClient _nightbot;
         private readonly IServiceProvider _serviceProvider;
@@ -32,6 +36,8 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
 
         public RequestAckHandler(
             ICallbackManager<HermesRequestData> callbackManager,
+            IChatterGroupManager groups,
+            IUsagePolicy<long> policies,
             TwitchApiClient twitch,
             NightbotApiClient nightbot,
             IServiceProvider serviceProvider,
@@ -41,6 +47,8 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
         )
         {
             _callbackManager = callbackManager;
+            _groups = groups;
+            _policies = policies;
             _twitch = twitch;
             _nightbot = nightbot;
             _serviceProvider = serviceProvider;
@@ -358,6 +366,74 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
                 }
                 else
                     _logger.Warning("Failed to update default TTS voice via request.");
+            }
+            else if (message.Request.Type == "get_policies")
+            {
+                var policies = JsonSerializer.Deserialize<IEnumerable<PolicyMessage>>(message.Data!.ToString()!, _options);
+                if (policies == null || !policies.Any())
+                {
+                    _logger.Information($"Policies have been set to default.");
+                    _policies.Set("everyone", "tts", 100, TimeSpan.FromSeconds(15));
+                    return;
+                }
+
+                foreach (var policy in policies)
+                {
+                    var group = _groups.Get(policy.GroupId.ToString());
+                    if (policy == null)
+                    {
+                        _logger.Debug($"Policy data failed");
+                        continue;
+                    }
+                    _logger.Debug($"Policy data [policy id: {policy.Id}][path: {policy.Path}][group id: {policy.GroupId}][group name: {group?.Name}]");
+                    _policies.Set(group?.Name ?? string.Empty, policy.Path, policy.Usage, TimeSpan.FromMilliseconds(policy.Span));
+                }
+                _logger.Information($"Policies have been loaded, a total of {policies.Count()} policies.");
+            }
+            else if (message.Request.Type == "update_policy")
+            {
+                var policy = JsonSerializer.Deserialize<PolicyMessage>(message.Data!.ToString()!, _options);
+                var group = _groups.Get(policy.GroupId.ToString());
+                if (policy == null || group == null)
+                {
+                    _logger.Debug($"Policy data failed");
+                    return;
+                }
+                _logger.Debug($"Policy data [policy id: {policy.Id}][path: {policy.Path}][group id: {policy.GroupId}][group name: {group?.Name}]");
+                _policies.Set(group?.Name ?? string.Empty, policy.Path, policy.Usage, TimeSpan.FromMilliseconds(policy.Span));
+                _logger.Information($"Policy has been updated [policy id: {policy.Id}]");
+            }
+            else if (message.Request.Type == "create_policy")
+            {
+                var policy = JsonSerializer.Deserialize<PolicyMessage>(message.Data!.ToString()!, _options);
+
+                if (policy == null)
+                {
+                    _logger.Debug($"Policy data failed");
+                    return;
+                }
+                var group = _groups.Get(policy.GroupId.ToString());
+                if (group == null)
+                {
+                    _logger.Debug($"Group data failed");
+                    return;
+                }
+                _logger.Debug($"Policy data [policy id: {policy.Id}][path: {policy.Path}][group id: {policy.GroupId}][group name: {group?.Name}]");
+                _policies.Set(group?.Name, policy.Path, policy.Usage, TimeSpan.FromMilliseconds(policy.Span));
+                _logger.Information($"Policy has been updated [policy id: {policy.Id}]");
+            }
+            else if (message.Request.Type == "update_policies")
+            {
+                var policy = JsonSerializer.Deserialize<PolicyMessage>(message.Data!.ToString()!, _options);
+                var group = _groups.Get(policy.GroupId.ToString());
+                if (policy == null)
+                {
+                    _logger.Debug($"Policy data failed");
+                    return;
+                }
+                _logger.Debug($"Policy data [policy id: {policy.Id}][path: {policy.Path}][group id: {policy.GroupId}][group name: {group?.Name}]");
+                _policies.Set(group?.Name ?? string.Empty, policy.Path, policy.Usage, TimeSpan.FromMilliseconds(policy.Span));
+                _logger.Information($"Policy has been updated [policy id: {policy.Id}]");
             }
             else
             {

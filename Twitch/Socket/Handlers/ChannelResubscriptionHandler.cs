@@ -9,11 +9,11 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
     {
         public string Name => "channel.subscription.message";
 
-        private readonly ChatMessageReader _reader;
+        private readonly IChatMessageReader _reader;
         private readonly IRedemptionManager _redemptionManager;
         private readonly ILogger _logger;
 
-        public ChannelResubscriptionHandler(ChatMessageReader reader, IRedemptionManager redemptionManager, ILogger logger)
+        public ChannelResubscriptionHandler(IChatMessageReader reader, IRedemptionManager redemptionManager, ILogger logger)
         {
             _reader = reader;
             _redemptionManager = redemptionManager;

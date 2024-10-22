@@ -68,6 +68,7 @@ namespace TwitchChatTTS.Hermes.Socket.Handlers
             await client.FetchEmotes();
             await client.FetchRedemptions();
             await client.FetchPermissions();
+            await client.FetchPolicies();
 
             if (_user.NightbotConnection != null)
             {

@@ -80,8 +80,8 @@ s.AddSingleton<IChatCommand, VersionCommand>();
 s.AddSingleton<ICommandBuilder, CommandBuilder>();
 s.AddSingleton<IChatterGroupManager, ChatterGroupManager>();
 s.AddSingleton<IGroupPermissionManager, GroupPermissionManager>();
-s.AddSingleton<ICommandFactory, CommandFactory>();
 s.AddSingleton<ICommandManager, CommandManager>();
+s.AddTransient<ICommandFactory, CommandFactory>();
 
 s.AddSingleton<TTSPlayer>();
 s.AddSingleton<IRedemptionManager, RedemptionManager>();
@@ -94,7 +94,8 @@ s.AddSingleton<IEmoteDatabase, EmoteDatabase>();
 s.AddSingleton<TTSConsumer>();
 s.AddSingleton<TTSPublisher>();
 
-s.AddSingleton<ChatMessageReader>();
+s.AddSingleton<IChatMessageReader, ChatMessageReader>();
+s.AddSingleton<IUsagePolicy<long>, UsagePolicy<long>>();
 
 // OBS websocket
 s.AddKeyedSingleton<IWebSocketHandler, HelloHandler>("obs");
@@ -137,7 +138,7 @@ s.AddKeyedSingleton<ITwitchSocketHandler, SessionWelcomeHandler>("twitch");
 s.AddKeyedSingleton<ITwitchSocketHandler, SessionReconnectHandler>("twitch");
 s.AddKeyedSingleton<ITwitchSocketHandler, NotificationHandler>("twitch");
 
-s.AddKeyedSingleton<ITwitchSocketHandler, ChannelAdBreakHandler>("twitch-notifications");
+s.AddKeyedSingleton<ITwitchSocketHandler, ChannelAdBreakBeginHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelBanHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatMessageHandler>("twitch-notifications");
 s.AddKeyedSingleton<ITwitchSocketHandler, ChannelChatClearHandler>("twitch-notifications");

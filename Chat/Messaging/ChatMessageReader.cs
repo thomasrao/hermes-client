@@ -12,7 +12,7 @@ using TwitchChatTTS.Twitch.Socket.Messages;
 
 namespace TwitchChatTTS.Chat.Messaging
 {
-    public class ChatMessageReader
+    public class ChatMessageReader : IChatMessageReader
     {
         private readonly User _user;
         private readonly TTSPlayer _player;
@@ -94,7 +94,6 @@ namespace TwitchChatTTS.Chat.Messaging
         private IEnumerable<TTSMessage> HandlePartialMessage(string voice, string message)
         {
             var parts = _sfxRegex.Split(message);
-
             if (parts.Length == 1)
             {
                 return [new TTSMessage()

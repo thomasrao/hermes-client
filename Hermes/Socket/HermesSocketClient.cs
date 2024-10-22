@@ -215,6 +215,15 @@ namespace TwitchChatTTS.Hermes.Socket
             });
         }
 
+        public async Task FetchPolicies()
+        {
+            await Send(3, new RequestMessage()
+            {
+                Type = "get_policies",
+                Data = null
+            });
+        }
+
         public async Task FetchConnections()
         {
             await Send(3, new RequestMessage()

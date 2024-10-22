@@ -1,5 +1,6 @@
 using Serilog;
 using TwitchChatTTS.Chat.Commands;
+using TwitchChatTTS.Chat.Commands.Limits;
 using TwitchChatTTS.Chat.Groups;
 using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Chat.Messaging;
@@ -11,18 +12,20 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
     {
         public string Name => "channel.chat.message";
 
-        private readonly ChatMessageReader _reader;
+        private readonly IChatMessageReader _reader;
         private readonly User _user;
         private readonly ICommandManager _commands;
         private readonly IGroupPermissionManager _permissionManager;
+        private readonly IUsagePolicy<long> _permissionPolicy;
         private readonly IChatterGroupManager _chatterGroupManager;
         private readonly ILogger _logger;
 
 
         public ChannelChatMessageHandler(
-            ChatMessageReader reader,
+            IChatMessageReader reader,
             ICommandManager commands,
             IGroupPermissionManager permissionManager,
+            IUsagePolicy<long> permissionPolicy,
             IChatterGroupManager chatterGroupManager,
             User user,
             ILogger logger
@@ -32,8 +35,13 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             _user = user;
             _commands = commands;
             _permissionManager = permissionManager;
+            _permissionPolicy = permissionPolicy;
+
             _chatterGroupManager = chatterGroupManager;
             _logger = logger;
+
+            _permissionPolicy.Set("everyone", "tts", 100, TimeSpan.FromSeconds(15));
+            _permissionPolicy.Set("everyone", "tts.chat.messages.read", 3, TimeSpan.FromMilliseconds(15000));
         }
 
 
@@ -44,10 +52,8 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             if (data is not ChannelChatMessage message)
                 return;
 
-            var broadcasterId = long.Parse(message.BroadcasterUserId);
             var chatterId = long.Parse(message.ChatterUserId);
             var chatterLogin = message.ChatterUserLogin;
-            var messageId = message.MessageId;
             var fragments = message.Message.Fragments;
             var groups = GetGroups(message.Badges, chatterId);
             var bits = GetTotalBits(fragments);
@@ -56,14 +62,22 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             if (commandResult != ChatCommandResult.Unknown)
                 return;
 
-            if (!HasPermission(message.ChannelPointsCustomRewardId, chatterId, groups, bits))
+            string permission = GetPermissionPath(message.ChannelPointsCustomRewardId, bits);
+            if (!HasPermission(chatterId, groups, permission))
             {
-                _logger.Debug($"Blocked message by {chatterLogin}: {message}");
+                _logger.Debug($"Blocked message [chatter: {chatterLogin}][message: {message}]");
                 return;
             }
 
+            if (!_permissionPolicy.TryUse(chatterId, groups, permission))
+            {
+                _logger.Debug($"Chatter has been rate limited from TTS [chatter: {chatterLogin}][chatter id: {chatterId}][message: {message}]");
+                return;
+            }
+
+            var broadcasterId = long.Parse(message.BroadcasterUserId);
             int priority = _chatterGroupManager.GetPriorityFor(groups);
-            await _reader.Read(sender, broadcasterId, chatterId, chatterLogin, messageId, message.Reply, fragments, priority);
+            await _reader.Read(sender, broadcasterId, chatterId, chatterLogin, message.MessageId, message.Reply, fragments, priority);
         }
 
         private async Task<ChatCommandResult> CheckForChatCommand(string arguments, ChannelChatMessage message, IEnumerable<string> groups)
@@ -95,7 +109,7 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
             var customGroups = _chatterGroupManager.GetGroupNamesFor(chatterId);
             return defaultGroups.Union(badgesGroups).Union(customGroups);
         }
-        
+
         private int GetTotalBits(TwitchChatFragment[] fragments)
         {
             return fragments.Where(f => f.Type == "cheermote" && f.Cheermote != null)
@@ -103,14 +117,18 @@ namespace TwitchChatTTS.Twitch.Socket.Handlers
                 .Sum();
         }
 
-        private bool HasPermission(string? customRewardId, long chatterId, IEnumerable<string> groups, int bits)
+        private string GetPermissionPath(string? customRewardId, int bits)
         {
             var permissionPath = "tts.chat.messages.read";
             if (!string.IsNullOrWhiteSpace(customRewardId))
                 permissionPath = "tts.chat.redemptions.read";
             else if (bits > 0)
                 permissionPath = "tts.chat.bits.read";
+            return permissionPath;
+        }
 
+        private bool HasPermission(long chatterId, IEnumerable<string> groups, string permissionPath)
+        {
             return chatterId == _user.OwnerId ? true : _permissionManager.CheckIfAllowed(groups, permissionPath) == true;
         }
     }

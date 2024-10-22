@@ -3,6 +3,7 @@ using CommonSocketLibrary.Abstract;
 using CommonSocketLibrary.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using TwitchChatTTS.Chat.Commands.Limits;
 using TwitchChatTTS.Chat.Groups.Permissions;
 using TwitchChatTTS.Hermes.Socket;
 using TwitchChatTTS.Twitch.Socket.Messages;
@@ -17,6 +18,7 @@ namespace TwitchChatTTS.Chat.Commands
         private readonly HermesSocketClient _hermes;
         //private readonly TwitchWebsocketClient _twitch;
         private readonly IGroupPermissionManager _permissionManager;
+        private readonly IUsagePolicy<long> _permissionPolicy;
         private readonly ILogger _logger;
         private string CommandStartSign { get; } = "!";
 
@@ -26,6 +28,7 @@ namespace TwitchChatTTS.Chat.Commands
             [FromKeyedServices("hermes")] SocketClient<WebSocketMessage> hermes,
             //[FromKeyedServices("twitch")] SocketClient<TwitchWebsocketMessage> twitch,
             IGroupPermissionManager permissionManager,
+            IUsagePolicy<long> limitManager,
             ILogger logger
         )
         {
@@ -33,6 +36,7 @@ namespace TwitchChatTTS.Chat.Commands
             _hermes = (hermes as HermesSocketClient)!;
             //_twitch = (twitch as TwitchWebsocketClient)!;
             _permissionManager = permissionManager;
+            _permissionPolicy = limitManager;
             _logger = logger;
         }
 
@@ -69,14 +73,21 @@ namespace TwitchChatTTS.Chat.Commands
             // Check if command can be executed by this chatter.
             var command = selectorResult.Command;
             long chatterId = long.Parse(message.ChatterUserId);
+            var path = $"tts.commands.{com}";
             if (chatterId != _user.OwnerId)
             {
-                bool executable = command.AcceptCustomPermission ? CanExecute(chatterId, groups, $"tts.commands.{com}", selectorResult.Permissions) : false;
+                bool executable = command.AcceptCustomPermission ? CanExecute(chatterId, groups, path, selectorResult.Permissions) : false;
                 if (!executable)
                 {
                     _logger.Warning($"Denied permission to use command [chatter id: {chatterId}][args: {arg}][command type: {command.GetType().Name}]");
                     return ChatCommandResult.Permission;
                 }
+            }
+
+            if (!_permissionPolicy.TryUse(chatterId, groups, path))
+            {
+                _logger.Warning($"Chatter reached usage limit on command [command type: {command.GetType().Name}][chatter id: {chatterId}][path: {path}][groups: {string.Join("|", groups)}]");
+                return ChatCommandResult.RateLimited;
             }
 
             // Check if the arguments are valid.
@@ -88,7 +99,7 @@ namespace TwitchChatTTS.Chat.Commands
                 // Optional parameters were validated while fetching this command.
                 if (!parameter.Optional && !parameter.Validate(argument, message.Message.Fragments))
                 {
-                    _logger.Warning($"Command failed due to an argument being invalid [argument name: {parameter.Name}][argument value: {argument}][arguments: {arg}][command type: {command.GetType().Name}][chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
+                    _logger.Warning($"Command failed due to an argument being invalid [argument name: {parameter.Name}][argument value: {argument}][parameter type: {parameter.GetType().Name}][arguments: {arg}][command type: {command.GetType().Name}][chatter: {message.ChatterUserLogin}][chatter id: {message.ChatterUserId}]");
                     return ChatCommandResult.Syntax;
                 }
             }
