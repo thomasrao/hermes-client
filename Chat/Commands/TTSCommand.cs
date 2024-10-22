@@ -36,13 +36,13 @@ namespace TwitchChatTTS.Chat.Commands
             {
                 b.CreateStaticInputParameter("add", b =>
                 {
-                    b.CreateVoiceNameParameter("voiceName", false)
+                    b.CreateUnvalidatedParameter("voiceName")
                         .CreateCommand(new AddTTSVoiceCommand(_user, _logger));
                 })
                 .AddAlias("insert", "add")
                 .CreateStaticInputParameter("delete", b =>
                 {
-                    b.CreateVoiceNameParameter("voiceName", true)
+                    b.CreateVoiceNameParameter("voiceName", false)
                         .CreateCommand(new DeleteTTSVoiceCommand(_user, _logger));
                 })
                 .AddAlias("del", "delete")
