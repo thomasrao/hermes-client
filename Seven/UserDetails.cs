@@ -8,7 +8,7 @@ namespace TwitchChatTTS.Seven
         public string Platform { get; set; }
         public string Username { get; set; }
         public int EmoteCapacity { get; set; }
-        public int? EmoteSetId { get; set; }
+        public string EmoteSetId { get; set; }
         public EmoteSet EmoteSet { get; set; }
         public SevenUser User { get; set; }
     }
